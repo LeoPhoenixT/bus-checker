@@ -72,3 +72,5 @@ security vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 The source code is available under the [MIT License](LICENSE). This licence does
 not grant rights to third-party transport or map data.
+
+<!-- Temporary CI verification change. -->
