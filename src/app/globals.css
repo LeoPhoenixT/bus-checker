@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+/* Enable class-based dark mode for Tailwind v4 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Light mode (default) */
+:root {
+  --background: #f1f5f9;
+  --foreground: #0f172a;
+  --card-bg: #ffffff;
+  --popover-bg: #ffffff;
+  --card-border: #e2e8f0;
+  --input-bg: #ffffff;
+  --input-border: #cbd5e1;
+  --muted: #64748b;
+  --divider: #e2e8f0;
+}
+
+/* Dark mode */
+.dark {
+  --background: #0d1117;
+  --foreground: #e6edf3;
+  --card-bg: rgba(255,255,255,0.04);
+  --popover-bg: #161b22;
+  --card-border: rgba(255,255,255,0.10);
+  --input-bg: rgba(255,255,255,0.05);
+  --input-border: rgba(255,255,255,0.10);
+  --muted: #6b7280;
+  --divider: rgba(255,255,255,0.06);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Leaflet overrides — fix icon paths broken by bundlers */
+.leaflet-default-icon-path {
+  background-image: url("https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png");
+}
+
+/* Prevent Leaflet map tiles from being affected by CSS transitions */
+.leaflet-container img.leaflet-tile {
+  transition: none !important;
+}
+
+/* Dark mode Leaflet controls */
+.dark .leaflet-bar a {
+  background-color: #1e293b;
+  color: #e2e8f0;
+  border-color: rgba(255,255,255,0.15);
+}
+.dark .leaflet-bar a:hover {
+  background-color: #334155;
+}
+.dark .leaflet-control-attribution {
+  background-color: rgba(15, 23, 42, 0.8);
+  color: #94a3b8;
+}
+.dark .leaflet-control-attribution a {
+  color: #94a3b8;
+}
