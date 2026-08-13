@@ -14,5 +14,11 @@ Do not commit credentials, personal data, generated build output, or local
 environment files. Report security problems privately according to
 [SECURITY.md](SECURITY.md).
 
+Before adding or changing an external API, dataset, map provider, package, font,
+media asset, or other third-party resource, review its license and terms and
+document any attribution or redistribution requirements in the repository.
+Non-permissive or unusual dependency licenses require explicit review before
+merge.
+
 By contributing, you agree that your contribution is licensed under the MIT
 License.
