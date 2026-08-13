@@ -52,16 +52,24 @@ for the Docker Compose deployment workflow.
 
 ## External services and data
 
-The application requests transport data from the
-[Hong Kong Government KMB ETA API](https://data.gov.hk/en-data/dataset/hk-td-tis_21-etakmb)
-and location-search results from the
-[Hong Kong Map Service](https://www.map.gov.hk/). Availability and accuracy
-depend on those services. Their data and services remain subject to their own
-terms and licences. This project is not affiliated with or endorsed by KMB or
-the Hong Kong Government.
+The application requests KMB estimated-arrival and related transport data from
+the Hong Kong Government open-data service published through
+[DATA.GOV.HK](https://data.gov.hk/en-data/dataset/hk-td-tis_21-etakmb), and
+location-search results from the [Hong Kong Map Service](https://www.map.gov.hk/).
 
-The application is an informational aid only. Confirm critical journey details
-with the relevant transport operator.
+The source code authored for this repository is licensed under MIT. That license
+does not relicense third-party transport data, map/search data, APIs, services,
+software, names, or marks. Those remain subject to their respective upstream
+licenses and terms. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the
+current dependency and data-source inventory.
+
+This project is independently developed and is not affiliated with or endorsed
+by KMB, the Transport Department, DATA.GOV.HK, the HKSAR Government, or the Hong
+Kong Map Service.
+
+Arrival times, route information, map results, and external-service
+availability may be delayed, incomplete, or inaccurate. Confirm time-sensitive
+journey information with the relevant transport operator.
 
 ## Contributing and security
 
@@ -70,5 +78,7 @@ security vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-The source code is available under the [MIT License](LICENSE). This licence does
-not grant rights to third-party transport or map data.
+Bus Checker source code authored for this repository is available under the
+[MIT License](LICENSE). Third-party software, data, APIs, services, names, and
+marks are excluded from that grant and remain subject to their own terms. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
