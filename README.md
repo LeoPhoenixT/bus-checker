@@ -59,9 +59,10 @@ location-search results from the [Hong Kong Map Service](https://www.map.gov.hk/
 
 The source code authored for this repository is licensed under MIT. That license
 does not relicense third-party transport data, map/search data, APIs, services,
-software, names, or marks. Those remain subject to their respective upstream
-licenses and terms. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the
-current dependency and data-source inventory.
+software, names, or marks. Runtime dependencies also remain subject to their own
+licenses; in particular, React Leaflet 5.0.0 is licensed under Hippocratic
+License 2.1 rather than MIT. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+for the current dependency and data-source inventory and redistribution notes.
 
 This project is independently developed and is not affiliated with or endorsed
 by KMB, the Transport Department, DATA.GOV.HK, the HKSAR Government, or the Hong
