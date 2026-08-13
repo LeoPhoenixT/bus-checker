@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,9 +14,27 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Bus Checker – KMB Nearby Stops",
-  description:
-    "Real-time KMB bus arrival times for stops near your location",
+  metadataBase: SITE_URL,
+  title: `${SITE_NAME} | KMB Bus ETA & Nearby Stops in Hong Kong`,
+  description: SITE_DESCRIPTION,
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: SITE_NAME,
+    title: `${SITE_NAME} | KMB Bus ETA & Nearby Stops in Hong Kong`,
+    description: SITE_DESCRIPTION,
+    locale: "zh_HK",
+    alternateLocale: "en_HK",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${SITE_NAME} | KMB Bus ETA & Nearby Stops in Hong Kong`,
+    description: SITE_DESCRIPTION,
+    images: ["/opengraph-image"],
+  },
 };
 
 export const viewport = {
@@ -31,7 +50,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="zh-Hant"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
       suppressHydrationWarning
     >
