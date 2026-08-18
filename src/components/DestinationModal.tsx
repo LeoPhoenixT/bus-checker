@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { X, MapPin } from 'lucide-react';
 import clsx from 'clsx';
 import { RADIUS_PRESETS } from '@/config';
+import { useLang } from '@/contexts/LanguageContext';
 import { DestinationSearch } from './DestinationSearch';
 import type { AddressSearchResult, DestinationSelection, Stop } from '@/lib/types';
 
@@ -31,6 +32,7 @@ export function DestinationModal({
   destinationRadius,
   onChangeRadius,
 }: DestinationModalProps) {
+  const { lang } = useLang();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markerRef = useRef<LeafletMarker | null>(null);
@@ -163,7 +165,7 @@ export function DestinationModal({
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4"
       role="dialog"
       aria-modal="true"
-      aria-label="Select destination"
+      aria-label={lang === 'en' ? 'Select destination' : '選擇目的地'}
     >
       {/* Overlay */}
       <div
@@ -178,12 +180,12 @@ export function DestinationModal({
           <div className="flex items-center gap-2">
             <MapPin className="h-4 w-4 text-blue-500" />
             <h2 className="text-sm font-semibold text-[var(--foreground)]">
-              Select Destination
+              {lang === 'en' ? 'Select Destination' : '選擇目的地'}
             </h2>
           </div>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={lang === 'en' ? 'Close' : '關閉'}
             className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--card-border)] transition"
           >
             <X className="h-4 w-4" />
@@ -197,13 +199,13 @@ export function DestinationModal({
             source: 'address',
             lat: address.lat,
             lon: address.lon,
-            label: address.labelEn,
+            label: lang === 'en' ? address.labelEn : address.labelTc,
           })}
         />
 
         {/* Radius selector */}
         {selection?.kind !== 'stop' ? <div className="flex items-center gap-3 border-b border-[var(--divider)] px-4 py-2.5 bg-[var(--background)]">
-          <span className="text-xs text-[var(--muted)]">Destination zone:</span>
+          <span className="text-xs text-[var(--muted)]">{lang === 'en' ? 'Destination zone:' : '目的地範圍：'}</span>
           <div className="flex gap-1.5">
             {RADIUS_PRESETS.map((preset) => (
               <button
@@ -222,7 +224,7 @@ export function DestinationModal({
           </div>
         </div> : (
           <div className="border-b border-[var(--divider)] bg-[var(--background)] px-4 py-2.5 text-xs font-medium text-blue-600 dark:text-blue-400">
-            Exact stop
+            {lang === 'en' ? 'Exact stop' : '指定巴士站'}
           </div>
         )}
 
@@ -231,7 +233,7 @@ export function DestinationModal({
           <div ref={mapContainerRef} className="h-72 sm:h-96 w-full" />
           {!selection && (
             <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1.5 text-xs text-white/90">
-              Tap map to set destination
+              {lang === 'en' ? 'Tap map to set destination' : '點按地圖設定目的地'}
             </div>
           )}
         </div>
@@ -241,9 +243,9 @@ export function DestinationModal({
           <p className="text-xs text-[var(--muted)]">
             {selection
               ? selection.kind === 'stop'
-                ? selection.stop.name_en
+                ? lang === 'en' ? selection.stop.name_en : selection.stop.name_tc
                 : `${selection.lat.toFixed(5)}, ${selection.lon.toFixed(5)}`
-              : 'No point selected'}
+              : lang === 'en' ? 'No point selected' : '尚未選擇位置'}
           </p>
           <button
             disabled={!selection}
@@ -257,7 +259,7 @@ export function DestinationModal({
                 : 'cursor-not-allowed bg-[var(--card-border)] text-[var(--muted)]',
             )}
           >
-            Confirm
+            {lang === 'en' ? 'Confirm' : '確認'}
           </button>
         </div>
       </div>

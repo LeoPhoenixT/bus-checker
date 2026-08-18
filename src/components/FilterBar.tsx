@@ -70,7 +70,7 @@ export function FilterBar({
           <button
             onClick={commit}
             disabled={!inputValue.trim()}
-            aria-label="Add filter"
+            aria-label={lang === 'en' ? 'Add filter' : '新增篩選'}
             className={clsx(
               'flex items-center justify-center rounded-xl border px-3 py-2.5 text-sm font-semibold transition',
               inputValue.trim()
@@ -106,7 +106,7 @@ export function FilterBar({
                 {f}
                 <button
                   onClick={() => onRemove(f)}
-                  aria-label={`Remove filter ${f}`}
+                  aria-label={lang === 'en' ? `Remove filter ${f}` : `移除篩選 ${f}`}
                   className="ml-0.5 rounded-full hover:text-blue-400 transition"
                 >
                   <X className="h-3 w-3" />
@@ -117,7 +117,7 @@ export function FilterBar({
               onClick={onClear}
               className="text-xs text-[var(--muted)] underline underline-offset-2 hover:text-[var(--foreground)] transition"
             >
-              Clear all
+              {lang === 'en' ? 'Clear all' : '全部清除'}
             </button>
           </div>
         )}

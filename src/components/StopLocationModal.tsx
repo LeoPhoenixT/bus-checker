@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { X, MapPin } from 'lucide-react';
+import { useLang } from '@/contexts/LanguageContext';
 import type { NearbyStop } from '@/lib/types';
 
 interface StopLocationModalProps {
@@ -14,8 +15,10 @@ interface StopLocationModalProps {
 type LeafletMap = import('leaflet').Map;
 
 export function StopLocationModal({ isOpen, onClose, stop }: StopLocationModalProps) {
+  const { lang } = useLang();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
+  const stopName = lang === 'en' ? stop.name_en : stop.name_tc;
 
   // Initialise Leaflet map (client-side only — Leaflet requires window)
   useEffect(() => {
@@ -96,7 +99,7 @@ export function StopLocationModal({ isOpen, onClose, stop }: StopLocationModalPr
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4"
       role="dialog"
       aria-modal="true"
-      aria-label={`Bus stop location: ${stop.name_en}`}
+      aria-label={lang === 'en' ? `Bus stop location: ${stopName}` : `巴士站位置：${stopName}`}
     >
       {/* Overlay */}
       <div
@@ -112,14 +115,14 @@ export function StopLocationModal({ isOpen, onClose, stop }: StopLocationModalPr
             <MapPin className="h-4 w-4 text-red-500 shrink-0" />
             <div className="min-w-0">
               <h2 className="text-sm font-semibold text-[var(--foreground)] truncate">
-                {stop.name_en}
+                {stopName}
               </h2>
               <p className="text-xs text-[var(--muted)] font-mono">{stop.stop}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={lang === 'en' ? 'Close' : '關閉'}
             className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--card-border)] transition shrink-0"
           >
             <X className="h-4 w-4" />
