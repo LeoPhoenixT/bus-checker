@@ -166,11 +166,12 @@ export function ETARow({ route, etas, alightingStopIds = [], destinationStopName
       <button
         onClick={handleBookmarkClick}
         className="shrink-0 text-lg transition-all hover:scale-110 active:scale-95"
-        aria-label={isBookmarked(route) ? 'Remove bookmark' : 'Add bookmark'}
+        aria-label={isBookmarked(route)
+          ? lang === 'en' ? 'Remove bookmark' : '移除收藏'
+          : lang === 'en' ? 'Add bookmark' : '加入收藏'}
       >
         {isBookmarked(route) ? '⭐' : '☆'}
       </button>
     </div>
   );
 }
-
