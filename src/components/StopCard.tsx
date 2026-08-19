@@ -16,6 +16,8 @@ interface StopCardProps {
   etasLoading: boolean;
   destinationMatches?: DirectRouteMatch[];
   destinationStopNames?: DestinationStopNames;
+  favouriteRoutes?: Set<string>;
+  favouritesOnly?: boolean;
 }
 
 interface RouteGroup {
@@ -35,6 +37,8 @@ export function StopCard({
   etasLoading,
   destinationMatches,
   destinationStopNames,
+  favouriteRoutes = new Set(),
+  favouritesOnly = false,
 }: StopCardProps) {
   const { lang } = useLang();
   const [showStopMap, setShowStopMap] = useState(false);
@@ -70,14 +74,17 @@ export function StopCard({
         )
       : [...grouped.keys()];
 
-  const finalKeys = visibleKeys;
+  const finalKeys = favouritesOnly
+    ? visibleKeys.filter((key) => favouriteRoutes.has(grouped.get(key)!.route.toUpperCase()))
+    : visibleKeys;
 
   /* Route filtering may hide a card. Destination-valid cards remain visible without live ETA. */
   const matchingRouteWithoutETA = destinationMatches?.some((match) =>
-    routeFilters.some((filter) => match.route.toUpperCase().includes(filter)),
+    (routeFilters.length === 0 || routeFilters.some((filter) => match.route.toUpperCase().includes(filter)))
+    && (!favouritesOnly || favouriteRoutes.has(match.route.toUpperCase())),
   ) ?? false;
   if (
-    routeFilters.length > 0
+    (routeFilters.length > 0 || favouritesOnly)
     && finalKeys.length === 0
     && !matchingRouteWithoutETA
     && !etasLoading

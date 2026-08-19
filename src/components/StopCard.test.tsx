@@ -28,8 +28,9 @@ afterEach(cleanup);
 
 function renderCard(
   etas: ETAEntry[],
-  matches: DirectRouteMatch[],
+  matches: DirectRouteMatch[] | undefined,
   destinationStopNames = {},
+  props: Partial<React.ComponentProps<typeof StopCard>> = {},
 ) {
   return render(
     <BookmarkProvider>
@@ -41,6 +42,7 @@ function renderCard(
           etasLoading={false}
           destinationMatches={matches}
           destinationStopNames={destinationStopNames}
+          {...props}
         />
       </LanguageProvider>
     </BookmarkProvider>,
@@ -77,5 +79,49 @@ describe('StopCard destination eligibility', () => {
       DEST0002: { en: 'Second Stop', tc: '第二站' },
     });
     expect(screen.getByText('落車站：第一站 / 第二站')).toBeDefined();
+  });
+});
+
+describe('StopCard favourite route filtering', () => {
+  it('leaves normal routes visible when disabled', () => {
+    renderCard([eta(), eta({ route: '74B' })], undefined, {}, { favouritesOnly: false });
+    expect(screen.getByText('88X')).toBeDefined();
+    expect(screen.getByText('74B')).toBeDefined();
+  });
+
+  it('keeps only favourite routes in a mixed stop', () => {
+    renderCard([eta(), eta({ route: '74B' })], undefined, {}, {
+      favouritesOnly: true,
+      favouriteRoutes: new Set(['74B']),
+    });
+    expect(screen.getByText('74B')).toBeDefined();
+    expect(screen.queryByText('88X')).toBeNull();
+    expect(screen.getByText('ORIGIN01')).toBeDefined();
+  });
+
+  it('hides a stop with no favourite routes', () => {
+    renderCard([eta()], undefined, {}, {
+      favouritesOnly: true,
+      favouriteRoutes: new Set(['74B']),
+    });
+    expect(screen.queryByText('ORIGIN01')).toBeNull();
+  });
+
+  it('combines favourite and route-number filters with AND', () => {
+    renderCard([eta(), eta({ route: '74B' })], undefined, {}, {
+      routeFilters: ['74'],
+      favouritesOnly: true,
+      favouriteRoutes: new Set(['88X']),
+    });
+    expect(screen.queryByText('ORIGIN01')).toBeNull();
+  });
+
+  it('filters destination-valid routes, including routes without live ETA', () => {
+    renderCard([], [match, { ...match, route: '74B' }], {}, {
+      favouritesOnly: true,
+      favouriteRoutes: new Set(['88X']),
+    });
+    expect(screen.getByText('88X')).toBeDefined();
+    expect(screen.queryByText('74B')).toBeNull();
   });
 });
