@@ -5,7 +5,7 @@ import { getDistance } from 'geolib';
 import { APP_CONFIG } from '@/config';
 import { LanguageProvider, useLang } from '@/contexts/LanguageContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
-import { BookmarkProvider } from '@/contexts/BookmarkContext';
+import { BookmarkProvider, useBookmarks } from '@/contexts/BookmarkContext';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useNearbyStops } from '@/hooks/useNearbyStops';
 import { useStopETAs } from '@/hooks/useStopETAs';
@@ -15,7 +15,6 @@ import { getDestinationCandidates, getDestinationPoint } from '@/lib/destination
 import { getStopIds } from '@/lib/stopGroups';
 import { FilterBar } from '@/components/FilterBar';
 import { StopCard } from '@/components/StopCard';
-import { BookmarkSection } from '@/components/BookmarkSection';
 import { FavoriteSidebar } from '@/components/FavoriteSidebar';
 import { LocationPrompt } from '@/components/LocationPrompt';
 import { LanguageToggle } from '@/components/LanguageToggle';
@@ -36,9 +35,9 @@ function BusCheckerApp() {
   const [destRadius, setDestRadius] = useState<number>(APP_CONFIG.DESTINATION_DEFAULT_RADIUS_M);
   const [showDestModal, setShowDestModal] = useState(false);
 
-  // Bookmark section state
-  const [bookmarkSectionOpen, setBookmarkSectionOpen] = useState(false);
+  const [favouritesOnly, setFavouritesOnly] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { favoriteRoutes } = useBookmarks();
 
   const addFilter = (route: string) => {
     const r = route.trim().toUpperCase();
@@ -128,16 +127,20 @@ function BusCheckerApp() {
   }, [lat, lon, destinationPoint]);
 
   const filteredStopCount = useMemo(() => {
-    if (routeFilters.length === 0) return visibleStops.length;
+    if (routeFilters.length === 0 && !favouritesOnly) return visibleStops.length;
     return visibleStops.filter((s) => {
       const matches = destinationActive ? groupedMatchesByOriginStop[s.stop] ?? [] : undefined;
       const etas = filterEligibleETAs(groupedEtasMap[s.stop] ?? [], matches);
-      return routeFilters.some((filter) =>
-        etas.some((eta) => eta.route.toUpperCase().includes(filter))
-        || matches?.some((match) => match.route.toUpperCase().includes(filter)),
+      const routes = new Set([
+        ...etas.map((eta) => eta.route.toUpperCase()),
+        ...(matches ?? []).map((match) => match.route.toUpperCase()),
+      ]);
+      return [...routes].some((route) =>
+        (routeFilters.length === 0 || routeFilters.some((filter) => route.includes(filter)))
+        && (!favouritesOnly || favoriteRoutes.has(route)),
       );
     }).length;
-  }, [destinationActive, visibleStops, groupedEtasMap, groupedMatchesByOriginStop, routeFilters]);
+  }, [destinationActive, visibleStops, groupedEtasMap, groupedMatchesByOriginStop, routeFilters, favouritesOnly, favoriteRoutes]);
 
   return (
     <div className="min-h-screen">
@@ -205,6 +208,8 @@ function BusCheckerApp() {
           onClearDestination={() => {
             setDestination(null);
           }}
+          favouritesOnly={favouritesOnly}
+          onToggleFavouritesOnly={() => setFavouritesOnly((value) => !value)}
         />
       )}
 
@@ -253,10 +258,22 @@ function BusCheckerApp() {
                 : `附近 ${stops.length} 個巴士站均沒有前往目的地的路線。`}
             </p>
           </div>
+        ) : favouritesOnly && filteredStopCount === 0 && !(etaLoading && lastRefreshed === null) ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-32 text-center">
+            <p className="text-xl font-semibold">
+              {favoriteRoutes.size === 0
+                ? lang === 'en' ? 'No favourite routes saved.' : '尚未收藏任何路線。'
+                : lang === 'en' ? 'No favourite routes match the current filters.' : '沒有收藏路線符合目前的篩選條件。'}
+            </p>
+          </div>
         ) : (
           <>
             <p className="mb-4 text-xs text-[var(--muted)]">
-              {destinationActive
+              {favouritesOnly
+                ? lang === 'en'
+                  ? `${filteredStopCount} of ${stops.length} nearby stops match active filters`
+                  : `${stops.length} 個附近巴士站中有 ${filteredStopCount} 個符合篩選條件`
+                : destinationActive
                 ? lang === 'en'
                   ? `${visibleStops.length} of ${stops.length} stops have routes to destination${routeFilters.length > 0 ? ` · ${filteredStopCount} match filters` : ''}`
                   : `${stops.length} 個巴士站中有 ${visibleStops.length} 個有前往目的地的路線${routeFilters.length > 0 ? ` · ${filteredStopCount} 個符合篩選` : ''}`
@@ -264,17 +281,6 @@ function BusCheckerApp() {
                   ? `${stops.length} stop${stops.length !== 1 ? 's' : ''} within ${radius} m${routeFilters.length > 0 ? ` · ${filteredStopCount} match${filteredStopCount !== 1 ? 'es' : ''} active filters` : ''}`
                   : `${radius} 米內共 ${stops.length} 個巴士站${routeFilters.length > 0 ? ` · ${filteredStopCount} 個符合篩選條件` : ''}`}
             </p>
-
-            {/* Bookmark section */}
-            <BookmarkSection
-              etasMap={groupedEtasMap}
-              stops={visibleStops}
-              routeFilters={routeFilters}
-              isOpen={bookmarkSectionOpen}
-              onToggleOpen={() => setBookmarkSectionOpen(!bookmarkSectionOpen)}
-              matchesByOriginStop={destinationActive ? groupedMatchesByOriginStop : undefined}
-              destinationStopNames={destinationStopNames}
-            />
 
             {/* Main results */}
             <div className="space-y-4">
@@ -287,6 +293,8 @@ function BusCheckerApp() {
                   etasLoading={etaLoading && lastRefreshed === null}
                   destinationMatches={destinationActive ? groupedMatchesByOriginStop[stop.stop] ?? [] : undefined}
                   destinationStopNames={destinationStopNames}
+                  favouriteRoutes={favoriteRoutes}
+                  favouritesOnly={favouritesOnly}
                 />
               ))}
             </div>

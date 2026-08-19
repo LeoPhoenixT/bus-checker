@@ -14,6 +14,8 @@ interface FilterBarProps {
   destinationDistanceM: number | null;
   onOpenDestinationModal: () => void;
   onClearDestination: () => void;
+  favouritesOnly: boolean;
+  onToggleFavouritesOnly: () => void;
 }
 
 export function FilterBar({
@@ -25,6 +27,8 @@ export function FilterBar({
   destinationDistanceM,
   onOpenDestinationModal,
   onClearDestination,
+  favouritesOnly,
+  onToggleFavouritesOnly,
 }: FilterBarProps) {
   const { lang } = useLang();
   const [inputValue, setInputValue] = useState('');
@@ -94,6 +98,21 @@ export function FilterBar({
             <MapPin className="h-4 w-4" />
           </button>
         </div>
+
+        <button
+          type="button"
+          aria-pressed={favouritesOnly}
+          onClick={onToggleFavouritesOnly}
+          className={clsx(
+            'mt-2.5 inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold transition',
+            favouritesOnly
+              ? 'border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-300'
+              : 'border-[var(--input-border)] bg-[var(--input-bg)] text-[var(--muted)] hover:border-amber-500/40 hover:text-amber-600',
+          )}
+        >
+          {favouritesOnly ? '★' : '☆'}&nbsp;
+          {lang === 'en' ? 'Favourite routes only' : '只顯示收藏路線'}
+        </button>
 
         {filters.length > 0 && (
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
