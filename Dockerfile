@@ -32,9 +32,6 @@ COPY --from=builder /app/.next/standalone ./
 # Copy static assets (JS, CSS, fonts, etc.)
 COPY --from=builder /app/.next/static ./.next/static
 
-# Copy public files
-COPY --from=builder /app/public ./public
-
 # Expose port
 EXPOSE 3000
 

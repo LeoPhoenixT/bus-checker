@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-
-const KMB_BASE = 'https://data.etabus.gov.hk/v1/transport/kmb';
+import { KMB_API_BASE } from '@/lib/server/kmb';
 
 // KMB stop IDs are uppercase hex strings (e.g. "A3ADFCDF8487ADB9")
 const VALID_STOP_ID = /^[A-Z0-9]{8,20}$/i;
@@ -16,7 +15,7 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid stop ID' }, { status: 400 });
   }
 
-  const res = await fetch(`${KMB_BASE}/stop-eta/${stopId}`, {
+  const res = await fetch(`${KMB_API_BASE}/stop-eta/${stopId}`, {
     cache: 'no-store', // always fresh — real-time ETA
   });
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { X, MapPin } from 'lucide-react';
 import { useLang } from '@/contexts/LanguageContext';
+import { addOpenStreetMapTiles, createRedMarkerIcon, loadLeaflet } from '@/lib/leaflet';
 import type { NearbyStop } from '@/lib/types';
 
 interface StopLocationModalProps {
@@ -27,16 +28,8 @@ export function StopLocationModal({ isOpen, onClose, stop }: StopLocationModalPr
 
     let cancelled = false;
 
-    import('leaflet').then((L) => {
+    loadLeaflet().then((L) => {
       if (cancelled || !mapContainerRef.current) return;
-
-      // Fix default marker icon broken by bundlers
-      delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-      });
 
       const map = L.map(mapContainerRef.current, {
         center: [Number(stop.lat), Number(stop.long)],
@@ -44,19 +37,10 @@ export function StopLocationModal({ isOpen, onClose, stop }: StopLocationModalPr
         zoomControl: true,
       });
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 19,
-      }).addTo(map);
+      addOpenStreetMapTiles(L, map);
 
       // Red marker at stop location
-      const stopIcon = L.icon({
-        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
-        iconRetinaUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-      });
+      const stopIcon = createRedMarkerIcon(L);
 
       L.marker([Number(stop.lat), Number(stop.long)], { icon: stopIcon }).addTo(map);
 
@@ -78,18 +62,6 @@ export function StopLocationModal({ isOpen, onClose, stop }: StopLocationModalPr
       mapRef.current = null;
     }
   }, [isOpen]);
-
-  // Keep Leaflet CSS loaded
-  useEffect(() => {
-    const id = 'leaflet-css';
-    if (!document.getElementById(id)) {
-      const link = document.createElement('link');
-      link.id = id;
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
-    }
-  }, []);
 
   if (!isOpen) return null;
 

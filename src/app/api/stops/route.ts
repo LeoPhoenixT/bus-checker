@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-
-const KMB_BASE = 'https://data.etabus.gov.hk/v1/transport/kmb';
+import { KMB_API_BASE } from '@/lib/server/kmb';
 
 export async function GET() {
-  const res = await fetch(`${KMB_BASE}/stop`, {
+  const res = await fetch(`${KMB_API_BASE}/stop`, {
     next: { revalidate: 86400 }, // cache for 24 h — stop locations are static
   });
 
