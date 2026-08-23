@@ -5,6 +5,7 @@ import { X, MapPin } from 'lucide-react';
 import clsx from 'clsx';
 import { RADIUS_PRESETS } from '@/config';
 import { useLang } from '@/contexts/LanguageContext';
+import { addOpenStreetMapTiles, createRedMarkerIcon, loadLeaflet } from '@/lib/leaflet';
 import { DestinationSearch } from './DestinationSearch';
 import type { AddressSearchResult, DestinationSelection, Stop } from '@/lib/types';
 
@@ -49,7 +50,7 @@ export function DestinationModal({
     if (markerRef.current) {
       markerRef.current.setLatLng([lat, lon]);
     } else if (destinationIconRef.current) {
-      void import('leaflet').then((L) => {
+      void loadLeaflet().then((L) => {
         if (mapRef.current && destinationIconRef.current) {
           markerRef.current = L.marker([lat, lon], { icon: destinationIconRef.current }).addTo(mapRef.current);
         }
@@ -64,16 +65,8 @@ export function DestinationModal({
 
     let cancelled = false;
 
-    import('leaflet').then((L) => {
+    loadLeaflet().then((L) => {
       if (cancelled || !mapContainerRef.current) return;
-
-      // Fix default marker icon broken by bundlers
-      delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-      });
 
       // Default centre: user location or Hong Kong
       const centerLat = userLat ?? 22.3193;
@@ -85,10 +78,7 @@ export function DestinationModal({
         zoomControl: true,
       });
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 19,
-      }).addTo(map);
+      addOpenStreetMapTiles(L, map);
 
       // Blue marker at user's location
       if (userLat != null && userLon != null) {
@@ -101,13 +91,7 @@ export function DestinationModal({
       }
 
       // Red destination marker icon
-      const destIcon = L.icon({
-        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
-        iconRetinaUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-      });
+      const destIcon = createRedMarkerIcon(L);
       destinationIconRef.current = destIcon;
 
       // Handle map click to set destination
@@ -144,18 +128,6 @@ export function DestinationModal({
       setSelection(null);
     }
   }, [isOpen]);
-
-  // Keep Leaflet CSS loaded
-  useEffect(() => {
-    const id = 'leaflet-css';
-    if (!document.getElementById(id)) {
-      const link = document.createElement('link');
-      link.id = id;
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
-    }
-  }, []);
 
   if (!isOpen) return null;
 
