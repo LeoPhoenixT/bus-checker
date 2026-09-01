@@ -6,7 +6,6 @@ import { useLang } from '@/contexts/LanguageContext';
 import { ETARow } from './ETARow';
 import { StopLocationModal } from './StopLocationModal';
 import { filterEligibleETAs } from '@/lib/etaEligibility';
-import { getStopIds } from '@/lib/stopGroups';
 import type { DirectRouteMatch, DestinationStopNames, NearbyStop, ETAEntry } from '@/lib/types';
 
 interface StopCardProps {
@@ -105,11 +104,7 @@ export function StopCard({
         <div className="min-w-0 flex-1">
           <h2 className="font-semibold text-base leading-snug text-[var(--foreground)]">{name}</h2>
           <p className="mt-0.5 font-mono text-[11px] text-[var(--muted)] tracking-wide">
-            {getStopIds(stop).length === 1
-              ? stop.stop
-              : lang === 'en'
-                ? `${getStopIds(stop).length} colocated entries`
-                : `${getStopIds(stop).length} 個同位置站點記錄`}
+            {stop.stop}
           </p>
         </div>
         <span

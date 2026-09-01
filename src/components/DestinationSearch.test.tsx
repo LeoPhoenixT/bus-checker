@@ -74,16 +74,24 @@ describe('DestinationSearch', () => {
     expect(onSelectAddress).toHaveBeenCalledWith(expect.objectContaining({ id: 'address-1' }));
   });
 
-  it('shows colocated entries once and matches every underlying ID and alternate name', async () => {
-    const groupedStop: Stop = {
+  it('shows colocated KMB platforms as separate results', async () => {
+    const platformA: Stop = {
       ...stop,
-      stopIds: ['CENTRAL1', 'CENTRAL2'],
-      nameAliases: [
-        { name_en: stop.name_en, name_tc: stop.name_tc, name_sc: stop.name_sc },
-        { name_en: 'Central Exchange Square', name_tc: '中環交易廣場', name_sc: '中环交易广场' },
-      ],
+      stop: 'PLATFORM_A',
+      name_en: 'EXAMPLE INTERCHANGE (PLATFORM A)',
+      name_tc: '示例轉車站 (月台 A)',
+      name_sc: '示例转车站 (月台 A)',
+      lat: 22.000001,
+      long: 114.000001,
     };
-    vi.mocked(getCachedStops).mockResolvedValue([groupedStop]);
+    const platformB: Stop = {
+      ...platformA,
+      stop: 'PLATFORM_B',
+      name_en: 'EXAMPLE INTERCHANGE (PLATFORM B)',
+      name_tc: '示例轉車站 (月台 B)',
+      name_sc: '示例转车站 (月台 B)',
+    };
+    vi.mocked(getCachedStops).mockResolvedValue([platformA, platformB]);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ results: [] }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -96,34 +104,30 @@ describe('DestinationSearch', () => {
       </LanguageProvider>,
     );
     await act(async () => { await Promise.resolve(); });
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'CENTRAL2' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '示例轉車站' } });
 
-    expect(screen.getAllByRole('option')).toHaveLength(1);
-    expect(screen.getByText('2 個同位置站點記錄')).toBeDefined();
-    fireEvent.click(screen.getByText('中環巴士總站'));
-    expect(onSelectStop).toHaveBeenCalledWith(groupedStop);
-
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: '交易廣場' } });
-    expect(screen.getByText('中環巴士總站')).toBeDefined();
+    expect(screen.getAllByRole('option')).toHaveLength(2);
+    expect(screen.getByText('示例轉車站 (月台 A)')).toBeDefined();
+    fireEvent.click(screen.getByText('示例轉車站 (月台 B)'));
+    expect(onSelectStop).toHaveBeenCalledWith(platformB);
   });
 
-  it('returns 大圍轉車站 - 新翠邨新明樓 beyond the old eight-result cutoff', async () => {
+  it('returns a matching stop beyond the old eight-result cutoff', async () => {
     const distractors: Stop[] = Array.from({ length: 12 }, (_, index) => ({
       ...stop,
-      stop: `TAIWAI${String(index).padStart(2, '0')}`,
-      name_en: `Tai Wai stop ${index}`,
-      name_tc: `大圍其他站 ${index}`,
-      name_sc: `大围其他站 ${index}`,
+      stop: `SAMPLE${String(index).padStart(2, '0')}`,
+      name_en: `Sample stop ${index}`,
+      name_tc: `示例其他站 ${index}`,
+      name_sc: `示例其他站 ${index}`,
     }));
-    const taiWaiInterchange: Stop = {
+    const matchingPlatform: Stop = {
       ...stop,
-      stop: '4F09976CA4CF80C9',
-      stopIds: ['4F09976CA4CF80C9', '9ADE07CC443E4ACE', 'A004B076CFBD733C'],
-      name_en: 'Tai Wai BBI - Sun Ming House, Sun Chui Estate',
-      name_tc: '大圍轉車站 - 新翠邨新明樓',
-      name_sc: '大围转车站 - 新翠邨新明楼',
+      stop: 'PLATFORM_TARGET',
+      name_en: 'Example Interchange (Platform Target)',
+      name_tc: '示例轉車站 (目標月台)',
+      name_sc: '示例转车站 (目标月台)',
     };
-    vi.mocked(getCachedStops).mockResolvedValue([...distractors, taiWaiInterchange]);
+    vi.mocked(getCachedStops).mockResolvedValue([...distractors, matchingPlatform]);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ results: [] }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -135,9 +139,9 @@ describe('DestinationSearch', () => {
       </LanguageProvider>,
     );
     await act(async () => { await Promise.resolve(); });
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: '大圍' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '示例' } });
 
-    expect(screen.getByText('大圍轉車站 - 新翠邨新明樓')).toBeDefined();
-    expect(screen.getByText('3 個同位置站點記錄')).toBeDefined();
+    expect(screen.getByText('示例轉車站 (目標月台)')).toBeDefined();
+    expect(screen.getByText('PLATFORM_TARGET')).toBeDefined();
   });
 });
