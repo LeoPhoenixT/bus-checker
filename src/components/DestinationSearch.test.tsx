@@ -74,16 +74,24 @@ describe('DestinationSearch', () => {
     expect(onSelectAddress).toHaveBeenCalledWith(expect.objectContaining({ id: 'address-1' }));
   });
 
-  it('shows colocated entries once and matches every underlying ID and alternate name', async () => {
-    const groupedStop: Stop = {
+  it('shows colocated KMB platforms as separate results', async () => {
+    const ta600: Stop = {
       ...stop,
-      stopIds: ['CENTRAL1', 'CENTRAL2'],
-      nameAliases: [
-        { name_en: stop.name_en, name_tc: stop.name_tc, name_sc: stop.name_sc },
-        { name_en: 'Central Exchange Square', name_tc: '中環交易廣場', name_sc: '中环交易广场' },
-      ],
+      stop: 'BAE4DA32E5043726',
+      name_en: 'TAI WAI BBI - SUN CHUI ESTATE (TA600)',
+      name_tc: '大圍轉車站 - 新翠邨 (TA600)',
+      name_sc: '大围转车站 - 新翠邨 (TA600)',
+      lat: 22.370814,
+      long: 114.179545,
     };
-    vi.mocked(getCachedStops).mockResolvedValue([groupedStop]);
+    const ta601: Stop = {
+      ...ta600,
+      stop: 'F91B28AE855628AF',
+      name_en: 'TAI WAI BBI - SUN CHUI ESTATE (TA601)',
+      name_tc: '大圍轉車站 - 新翠邨 (TA601)',
+      name_sc: '大围转车站 - 新翠邨 (TA601)',
+    };
+    vi.mocked(getCachedStops).mockResolvedValue([ta600, ta601]);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ results: [] }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -96,15 +104,12 @@ describe('DestinationSearch', () => {
       </LanguageProvider>,
     );
     await act(async () => { await Promise.resolve(); });
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'CENTRAL2' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '大圍轉車站' } });
 
-    expect(screen.getAllByRole('option')).toHaveLength(1);
-    expect(screen.getByText('2 個同位置站點記錄')).toBeDefined();
-    fireEvent.click(screen.getByText('中環巴士總站'));
-    expect(onSelectStop).toHaveBeenCalledWith(groupedStop);
-
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: '交易廣場' } });
-    expect(screen.getByText('中環巴士總站')).toBeDefined();
+    expect(screen.getAllByRole('option')).toHaveLength(2);
+    expect(screen.getByText('大圍轉車站 - 新翠邨 (TA600)')).toBeDefined();
+    fireEvent.click(screen.getByText('大圍轉車站 - 新翠邨 (TA601)'));
+    expect(onSelectStop).toHaveBeenCalledWith(ta601);
   });
 
   it('returns 大圍轉車站 - 新翠邨新明樓 beyond the old eight-result cutoff', async () => {
@@ -115,15 +120,14 @@ describe('DestinationSearch', () => {
       name_tc: `大圍其他站 ${index}`,
       name_sc: `大围其他站 ${index}`,
     }));
-    const taiWaiInterchange: Stop = {
+    const taiWaiPlatform: Stop = {
       ...stop,
       stop: '4F09976CA4CF80C9',
-      stopIds: ['4F09976CA4CF80C9', '9ADE07CC443E4ACE', 'A004B076CFBD733C'],
       name_en: 'Tai Wai BBI - Sun Ming House, Sun Chui Estate',
       name_tc: '大圍轉車站 - 新翠邨新明樓',
       name_sc: '大围转车站 - 新翠邨新明楼',
     };
-    vi.mocked(getCachedStops).mockResolvedValue([...distractors, taiWaiInterchange]);
+    vi.mocked(getCachedStops).mockResolvedValue([...distractors, taiWaiPlatform]);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ results: [] }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -138,6 +142,6 @@ describe('DestinationSearch', () => {
     fireEvent.change(screen.getByRole('combobox'), { target: { value: '大圍' } });
 
     expect(screen.getByText('大圍轉車站 - 新翠邨新明樓')).toBeDefined();
-    expect(screen.getByText('3 個同位置站點記錄')).toBeDefined();
+    expect(screen.getByText('4F09976CA4CF80C9')).toBeDefined();
   });
 });
