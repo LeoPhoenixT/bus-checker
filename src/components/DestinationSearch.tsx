@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { LoaderCircle, MapPin, Search } from 'lucide-react';
 import { getCachedStops } from '@/lib/clientStops';
-import { getStopIds, getStopSearchNames } from '@/lib/stopGroups';
 import { useLang } from '@/contexts/LanguageContext';
 import type { AddressSearchResult, Stop } from '@/lib/types';
 
@@ -31,12 +30,10 @@ export function DestinationSearch({ onSelectStop, onSelectAddress }: Destination
   const stopResults = useMemo(() => {
     if (!normalizedQuery) return [];
     return stops.filter((stop) =>
-      getStopIds(stop).some((id) => id.toLocaleLowerCase().includes(normalizedQuery))
-      || getStopSearchNames(stop).some((name) =>
-        name.name_en.toLocaleLowerCase().includes(normalizedQuery)
-        || name.name_tc.toLocaleLowerCase().includes(normalizedQuery)
-        || name.name_sc.toLocaleLowerCase().includes(normalizedQuery),
-      ),
+      stop.stop.toLocaleLowerCase().includes(normalizedQuery)
+      || stop.name_en.toLocaleLowerCase().includes(normalizedQuery)
+      || stop.name_tc.toLocaleLowerCase().includes(normalizedQuery)
+      || stop.name_sc.toLocaleLowerCase().includes(normalizedQuery),
     ).slice(0, MAX_STOP_RESULTS);
   }, [normalizedQuery, stops]);
 
@@ -131,11 +128,7 @@ export function DestinationSearch({ onSelectStop, onSelectAddress }: Destination
               <span className="min-w-0">
                 <span className="block truncate text-sm">{lang === 'en' ? stop.name_en : stop.name_tc}</span>
                 <span className="block font-mono text-[10px] text-[var(--muted)]">
-                  {getStopIds(stop).length === 1
-                    ? stop.stop
-                    : lang === 'en'
-                      ? `${getStopIds(stop).length} colocated entries`
-                      : `${getStopIds(stop).length} 個同位置站點記錄`}
+                  {stop.stop}
                 </span>
               </span>
             </button>
