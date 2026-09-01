@@ -2,22 +2,12 @@ export type Lang = 'en' | 'tc';
 
 export interface Stop {
   stop: string;
-  /** All KMB stop IDs represented by this physical location. */
-  stopIds?: string[];
   name_en: string;
   name_tc: string;
   name_sc: string;
-  /** Alternate names from colocated KMB stop entries, used by destination search. */
-  nameAliases?: StopName[];
   lat: number;
   long: number;
   data_timestamp: string;
-}
-
-export interface StopName {
-  name_en: string;
-  name_tc: string;
-  name_sc: string;
 }
 
 export interface NearbyStop extends Stop {
