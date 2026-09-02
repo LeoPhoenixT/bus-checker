@@ -1,14 +1,18 @@
 'use client';
+import { Fragment } from 'react';
+import { MapPin } from 'lucide-react';
 import clsx from 'clsx';
 import { useLang } from '@/contexts/LanguageContext';
 import { useBookmarks } from '@/contexts/BookmarkContext';
-import type { DestinationStopNames, ETAEntry } from '@/lib/types';
+import type { DestinationStopNames, ETAEntry, Stop } from '@/lib/types';
 
 interface ETARowProps {
   route: string;
   etas: ETAEntry[];
   alightingStopIds?: string[];
   destinationStopNames?: DestinationStopNames;
+  destinationStops?: Record<string, Stop>;
+  onViewAlightingStop?: (stop: Stop) => void;
 }
 
 function getMinutesUntil(etaIso: string): number {
@@ -33,16 +37,25 @@ function routeColour(route: string): string {
   return ROUTE_COLOURS[h % ROUTE_COLOURS.length];
 }
 
-export function ETARow({ route, etas, alightingStopIds = [], destinationStopNames = {} }: ETARowProps) {
+export function ETARow({
+  route,
+  etas,
+  alightingStopIds = [],
+  destinationStopNames = {},
+  destinationStops = {},
+  onViewAlightingStop,
+}: ETARowProps) {
   const { lang } = useLang();
   const { isBookmarked, toggleBookmark } = useBookmarks();
 
   const first = etas[0];
   const dest = first ? (lang === 'en' ? first.dest_en : first.dest_tc) : '';
   const destPrefix = lang === 'en' ? 'To ' : '往 ';
-  const alightingNames = alightingStopIds.map((stopId) =>
-    destinationStopNames[stopId]?.[lang] ?? stopId,
-  );
+  const alightingStops = alightingStopIds.map((stopId) => ({
+    id: stopId,
+    name: destinationStopNames[stopId]?.[lang] ?? stopId,
+    stop: destinationStops[stopId],
+  }));
 
   // Compute minutes for each upcoming bus; filter out clearly departed
   const times = etas
@@ -129,9 +142,25 @@ export function ETARow({ route, etas, alightingStopIds = [], destinationStopName
         ) : (
           <p className="text-sm text-[var(--muted)]">{lang === 'en' ? 'No live arrivals' : '暫無班次資料'}</p>
         )}
-        {alightingNames.length > 0 && (
-          <p className="mt-0.5 text-[11px] leading-snug text-blue-600 dark:text-blue-400">
-            {lang === 'en' ? 'Alight at: ' : '落車站：'}{alightingNames.join(' / ')}
+        {alightingStops.length > 0 && (
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-1 text-[11px] leading-snug text-blue-600 dark:text-blue-400">
+            <span>{lang === 'en' ? 'Alight at: ' : '落車站：'}</span>
+            {alightingStops.map(({ id, name, stop }, index) => (
+              <Fragment key={id}>
+                {index > 0 && <span aria-hidden="true">/</span>}
+                {stop && onViewAlightingStop ? (
+                  <button
+                    type="button"
+                    onClick={() => onViewAlightingStop(stop)}
+                    className="inline-flex items-center gap-0.5 rounded underline-offset-2 hover:text-blue-800 hover:underline dark:hover:text-blue-200"
+                    aria-label={lang === 'en' ? `View ${name} on map` : `在地圖上查看${name}`}
+                  >
+                    <MapPin className="h-3 w-3" />
+                    {name}
+                  </button>
+                ) : <span>{name}</span>}
+              </Fragment>
+            ))}
           </p>
         )}
         {/* Later arrival times shown as smaller text beneath */}

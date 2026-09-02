@@ -13,6 +13,7 @@ interface DestinationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (selection: DestinationSelection) => void;
+  currentDestination: DestinationSelection | null;
   userLat: number | null;
   userLon: number | null;
   destinationRadius: number;
@@ -24,10 +25,27 @@ type LeafletMap = import('leaflet').Map;
 type LeafletMarker = import('leaflet').Marker;
 type LeafletIcon = import('leaflet').Icon;
 
+function getSelectionCoordinates(selection: DestinationSelection): [number, number] {
+  return selection.kind === 'stop'
+    ? [Number(selection.stop.lat), Number(selection.stop.long)]
+    : [selection.lat, selection.lon];
+}
+
+function getSelectionLabel(selection: DestinationSelection, lang: 'en' | 'tc'): string {
+  if (selection.kind === 'stop') return lang === 'en' ? selection.stop.name_en : selection.stop.name_tc;
+  return selection.label ?? `${selection.lat.toFixed(5)}, ${selection.lon.toFixed(5)}`;
+}
+
+function getSearchQuery(selection: DestinationSelection, lang: 'en' | 'tc'): string {
+  if (selection.kind === 'stop') return lang === 'en' ? selection.stop.name_en : selection.stop.name_tc;
+  return selection.source === 'address' ? selection.label ?? '' : '';
+}
+
 export function DestinationModal({
   isOpen,
   onClose,
   onConfirm,
+  currentDestination,
   userLat,
   userLon,
   destinationRadius,
@@ -42,8 +60,7 @@ export function DestinationModal({
 
   const placeSelection = (nextSelection: DestinationSelection) => {
     setSelection(nextSelection);
-    const lat = nextSelection.kind === 'stop' ? Number(nextSelection.stop.lat) : nextSelection.lat;
-    const lon = nextSelection.kind === 'stop' ? Number(nextSelection.stop.long) : nextSelection.lon;
+    const [lat, lon] = getSelectionCoordinates(nextSelection);
     const map = mapRef.current;
     if (!map) return;
     map.flyTo([lat, lon], 17);
@@ -58,6 +75,10 @@ export function DestinationModal({
     }
   };
 
+  useEffect(() => {
+    if (isOpen) setSelection(currentDestination);
+  }, [currentDestination, isOpen]);
+
   // Initialise Leaflet map (client-side only — Leaflet requires window)
   useEffect(() => {
     if (!isOpen || !mapContainerRef.current) return;
@@ -68,9 +89,10 @@ export function DestinationModal({
     loadLeaflet().then((L) => {
       if (cancelled || !mapContainerRef.current) return;
 
-      // Default centre: user location or Hong Kong
-      const centerLat = userLat ?? 22.3193;
-      const centerLon = userLon ?? 114.1694;
+      // Prefer the confirmed destination so reopening the picker shows its current selection.
+      const savedDestination = currentDestination && getSelectionCoordinates(currentDestination);
+      const centerLat = savedDestination?.[0] ?? userLat ?? 22.3193;
+      const centerLon = savedDestination?.[1] ?? userLon ?? 114.1694;
 
       const map = L.map(mapContainerRef.current, {
         center: [centerLat, centerLon],
@@ -93,6 +115,10 @@ export function DestinationModal({
       // Red destination marker icon
       const destIcon = createRedMarkerIcon(L);
       destinationIconRef.current = destIcon;
+
+      if (savedDestination) {
+        markerRef.current = L.marker(savedDestination, { icon: destIcon }).addTo(map);
+      }
 
       // Handle map click to set destination
       map.on('click', (e: import('leaflet').LeafletMouseEvent) => {
@@ -165,6 +191,7 @@ export function DestinationModal({
         </div>
 
         <DestinationSearch
+          initialQuery={currentDestination ? getSearchQuery(currentDestination, lang) : ''}
           onSelectStop={(stop: Stop) => placeSelection({ kind: 'stop', stop })}
           onSelectAddress={(address: AddressSearchResult) => placeSelection({
             kind: 'point',
@@ -214,9 +241,7 @@ export function DestinationModal({
         <div className="flex items-center justify-between gap-3 border-t border-[var(--divider)] px-4 py-3">
           <p className="text-xs text-[var(--muted)]">
             {selection
-              ? selection.kind === 'stop'
-                ? lang === 'en' ? selection.stop.name_en : selection.stop.name_tc
-                : `${selection.lat.toFixed(5)}, ${selection.lon.toFixed(5)}`
+              ? getSelectionLabel(selection, lang)
               : lang === 'en' ? 'No point selected' : '尚未選擇位置'}
           </p>
           <button

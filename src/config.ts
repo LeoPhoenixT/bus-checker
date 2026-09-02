@@ -10,7 +10,7 @@ export const APP_CONFIG = {
   DEFAULT_SEARCH_RADIUS_M: 200,
 
   /** Default destination zone radius in meters */
-  DESTINATION_DEFAULT_RADIUS_M: 500,
+  DESTINATION_DEFAULT_RADIUS_M: 200,
 
   /** ETA auto-refresh interval in milliseconds */
   REFRESH_INTERVAL_MS: 30_000,

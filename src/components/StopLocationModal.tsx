@@ -4,12 +4,12 @@ import { useEffect, useRef } from 'react';
 import { X, MapPin } from 'lucide-react';
 import { useLang } from '@/contexts/LanguageContext';
 import { addOpenStreetMapTiles, createRedMarkerIcon, loadLeaflet } from '@/lib/leaflet';
-import type { NearbyStop } from '@/lib/types';
+import type { Stop } from '@/lib/types';
 
 interface StopLocationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  stop: NearbyStop;
+  stop: Stop;
 }
 
 // Leaflet types (loaded dynamically, not at module level)
