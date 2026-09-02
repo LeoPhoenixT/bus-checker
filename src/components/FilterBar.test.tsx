@@ -16,6 +16,7 @@ function renderFilterBar(active: boolean, toggle = vi.fn()) {
         onRemove={vi.fn()}
         onClear={vi.fn()}
         destinationActive={false}
+        destinationLabel={null}
         destinationDistanceM={null}
         onOpenDestinationModal={vi.fn()}
         onClearDestination={vi.fn()}
@@ -41,5 +42,28 @@ describe('FilterBar favourite route filter', () => {
   it('renders the active state', () => {
     renderFilterBar(true);
     expect(screen.getByRole('button', { name: /★\s*只顯示收藏路線/ }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('shows a named destination alongside its distance', () => {
+    render(
+      <LanguageProvider>
+        <FilterBar
+          filters={[]}
+          onAdd={vi.fn()}
+          onRemove={vi.fn()}
+          onClear={vi.fn()}
+          destinationActive
+          destinationLabel="中環巴士總站"
+          destinationDistanceM={885}
+          onOpenDestinationModal={vi.fn()}
+          onClearDestination={vi.fn()}
+          favouritesOnly={false}
+          onToggleFavouritesOnly={vi.fn()}
+        />
+      </LanguageProvider>,
+    );
+
+    expect(screen.getByText('中環巴士總站')).toBeDefined();
+    expect(screen.getByText('885 m 外')).toBeDefined();
   });
 });

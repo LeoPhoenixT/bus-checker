@@ -11,6 +11,7 @@ interface FilterBarProps {
   onClear: () => void;
   // Destination props
   destinationActive: boolean;
+  destinationLabel: string | null;
   destinationDistanceM: number | null;
   onOpenDestinationModal: () => void;
   onClearDestination: () => void;
@@ -24,6 +25,7 @@ export function FilterBar({
   onRemove,
   onClear,
   destinationActive,
+  destinationLabel,
   destinationDistanceM,
   onOpenDestinationModal,
   onClearDestination,
@@ -49,6 +51,12 @@ export function FilterBar({
       commit();
     }
   };
+
+  const destinationDistanceLabel = destinationDistanceM != null
+    ? destinationDistanceM >= 1000
+      ? `${(destinationDistanceM / 1000).toFixed(1)} km ${lang === 'en' ? 'away' : '外'}`
+      : `${destinationDistanceM} m ${lang === 'en' ? 'away' : '外'}`
+    : lang === 'en' ? 'selected' : '已選';
 
   return (
     <div className="sticky top-0 z-10 border-b border-[var(--card-border)] bg-[var(--background)]/95 backdrop-blur-md px-4 py-3 shadow-sm">
@@ -148,11 +156,11 @@ export function FilterBar({
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
               <MapPin className="h-3 w-3" />
-              {destinationDistanceM != null
-                ? destinationDistanceM >= 1000
-                  ? `${(destinationDistanceM / 1000).toFixed(1)} km ${lang === 'en' ? 'away' : '外'}`
-                  : `${destinationDistanceM} m ${lang === 'en' ? 'away' : '外'}`
-                : lang === 'en' ? 'selected' : '已選'}
+              {destinationLabel && (
+                <span className="max-w-40 truncate" title={destinationLabel}>{destinationLabel}</span>
+              )}
+              {destinationLabel && <span aria-hidden="true">·</span>}
+              <span>{destinationDistanceLabel}</span>
               <button
                 onClick={onClearDestination}
                 aria-label={lang === 'en' ? 'Clear destination' : '清除目的地'}

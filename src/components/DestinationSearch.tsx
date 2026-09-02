@@ -9,13 +9,14 @@ import type { AddressSearchResult, Stop } from '@/lib/types';
 interface DestinationSearchProps {
   onSelectStop: (stop: Stop) => void;
   onSelectAddress: (address: AddressSearchResult) => void;
+  initialQuery?: string;
 }
 
 const MAX_STOP_RESULTS = 50;
 
-export function DestinationSearch({ onSelectStop, onSelectAddress }: DestinationSearchProps) {
+export function DestinationSearch({ onSelectStop, onSelectAddress, initialQuery = '' }: DestinationSearchProps) {
   const { lang } = useLang();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery);
   const [open, setOpen] = useState(false);
   const [stops, setStops] = useState<Stop[]>([]);
   const [addresses, setAddresses] = useState<AddressSearchResult[]>([]);

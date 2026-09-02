@@ -66,6 +66,11 @@ function BusCheckerApp() {
   );
 
   const destinationActive = destination !== null;
+  const destinationLabel = useMemo(() => {
+    if (!destination) return null;
+    if (destination.kind === 'stop') return lang === 'en' ? destination.stop.name_en : destination.stop.name_tc;
+    return destination.source === 'address' ? destination.label ?? null : null;
+  }, [destination, lang]);
   const originStopIds = useMemo(() => stops.flatMap(getStopIds), [stops]);
   const destinationCandidates: Stop[] = useMemo(
     () => getDestinationCandidates(destination, destinationStops),
@@ -203,6 +208,7 @@ function BusCheckerApp() {
           onRemove={removeFilter}
           onClear={clearFilters}
           destinationActive={destinationActive}
+          destinationLabel={destinationLabel}
           destinationDistanceM={destDistanceM}
           onOpenDestinationModal={() => setShowDestModal(true)}
           onClearDestination={() => {
@@ -318,6 +324,7 @@ function BusCheckerApp() {
           setDestination(selection);
           setShowDestModal(false);
         }}
+        currentDestination={destination}
         userLat={lat}
         userLon={lon}
         destinationRadius={destRadius}
