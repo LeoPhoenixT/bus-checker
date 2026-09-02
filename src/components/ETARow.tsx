@@ -15,8 +15,8 @@ interface ETARowProps {
   onViewAlightingStop?: (stop: Stop) => void;
 }
 
-function getMinutesUntil(etaIso: string): number {
-  return Math.round((new Date(etaIso).getTime() - Date.now()) / 60_000);
+export function getMinutesUntil(etaIso: string): number {
+  return Math.floor((new Date(etaIso).getTime() - Date.now()) / 60_000);
 }
 
 // Deterministic colour per route number — readable in both light & dark
