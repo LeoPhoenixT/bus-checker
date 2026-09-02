@@ -6,7 +6,7 @@ import { useLang } from '@/contexts/LanguageContext';
 import { ETARow } from './ETARow';
 import { StopLocationModal } from './StopLocationModal';
 import { filterEligibleETAs } from '@/lib/etaEligibility';
-import type { DirectRouteMatch, DestinationStopNames, NearbyStop, ETAEntry } from '@/lib/types';
+import type { DirectRouteMatch, DestinationStopNames, NearbyStop, ETAEntry, Stop } from '@/lib/types';
 
 interface StopCardProps {
   stop: NearbyStop;
@@ -15,6 +15,7 @@ interface StopCardProps {
   etasLoading: boolean;
   destinationMatches?: DirectRouteMatch[];
   destinationStopNames?: DestinationStopNames;
+  destinationStops?: Record<string, Stop>;
   favouriteRoutes?: Set<string>;
   favouritesOnly?: boolean;
 }
@@ -36,11 +37,12 @@ export function StopCard({
   etasLoading,
   destinationMatches,
   destinationStopNames,
+  destinationStops,
   favouriteRoutes = new Set(),
   favouritesOnly = false,
 }: StopCardProps) {
   const { lang } = useLang();
-  const [showStopMap, setShowStopMap] = useState(false);
+  const [mapStop, setMapStop] = useState<Stop | null>(null);
   const name = lang === 'en' ? stop.name_en : stop.name_tc;
 
   /* Group ETAs by route+direction (merging service types), keep up to 3 eta_seq per group */
@@ -119,7 +121,7 @@ export function StopCard({
           {distLabel}
         </span>
         <button
-          onClick={() => setShowStopMap(true)}
+          onClick={() => setMapStop(stop)}
           className={clsx(
             'mt-0.5 shrink-0 flex items-center justify-center h-7 w-7 rounded-lg transition',
             'border border-[var(--divider)] hover:border-blue-500/50 hover:bg-blue-500/10',
@@ -151,6 +153,8 @@ export function StopCard({
               etas={grouped.get(key)!.etas}
               alightingStopIds={grouped.get(key)!.alightingStopIds}
               destinationStopNames={destinationStopNames}
+              destinationStops={destinationStops}
+              onViewAlightingStop={setMapStop}
             />
           ))
         )}
@@ -158,7 +162,7 @@ export function StopCard({
     </article>
 
     {/* Stop location map modal */}
-    <StopLocationModal isOpen={showStopMap} onClose={() => setShowStopMap(false)} stop={stop} />
+    <StopLocationModal isOpen={mapStop !== null} onClose={() => setMapStop(null)} stop={mapStop ?? stop} />
     </>
   );
 }

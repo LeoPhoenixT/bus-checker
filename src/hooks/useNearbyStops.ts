@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import { APP_CONFIG } from '@/config';
 import { getCachedStops } from '@/lib/clientStops';
 import { filterNearby } from '@/lib/geo';
 import type { NearbyStop } from '@/lib/types';
@@ -34,7 +35,12 @@ export function useNearbyStops(
         // Also filter stops near destination if provided
         if (destinationLat != null && destinationLon != null) {
           setDestinationStops(
-            filterNearby(allStops, destinationLat, destinationLon, destinationRadiusM ?? 500),
+            filterNearby(
+              allStops,
+              destinationLat,
+              destinationLon,
+              destinationRadiusM ?? APP_CONFIG.DESTINATION_DEFAULT_RADIUS_M,
+            ),
           );
         } else {
           setDestinationStops([]);

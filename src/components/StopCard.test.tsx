@@ -1,9 +1,15 @@
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BookmarkProvider } from '@/contexts/BookmarkContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { StopCard } from './StopCard';
-import type { DirectRouteMatch, ETAEntry, NearbyStop } from '@/lib/types';
+import type { DirectRouteMatch, ETAEntry, NearbyStop, Stop } from '@/lib/types';
+
+vi.mock('./StopLocationModal', () => ({
+  StopLocationModal: ({ isOpen, stop }: { isOpen: boolean; stop: Stop }) => isOpen ? (
+    <div role="dialog">{stop.name_tc}</div>
+  ) : null,
+}));
 
 const stop: NearbyStop = {
   stop: 'ORIGIN01', name_en: 'Origin', name_tc: '起點', name_sc: '起点',
@@ -65,7 +71,8 @@ describe('StopCard destination eligibility', () => {
     renderCard([], [match], { DEST0001: { en: 'Destination Stop', tc: '目的地站' } });
     expect(screen.getByText('暫無班次資料')).toBeDefined();
     expect(screen.getByText('ORIGIN01')).toBeDefined();
-    expect(screen.getByText('落車站：目的地站')).toBeDefined();
+    expect(screen.getByText('落車站：')).toBeDefined();
+    expect(screen.getByText('目的地站')).toBeDefined();
     expect(screen.getByText('88X')).toBeDefined();
   });
 
@@ -78,7 +85,22 @@ describe('StopCard destination eligibility', () => {
       DEST0001: { en: 'First Stop', tc: '第一站' },
       DEST0002: { en: 'Second Stop', tc: '第二站' },
     });
-    expect(screen.getByText('落車站：第一站 / 第二站')).toBeDefined();
+    expect(screen.getByText('落車站：')).toBeDefined();
+    expect(screen.getByText('第一站')).toBeDefined();
+    expect(screen.getByText('第二站')).toBeDefined();
+  });
+
+  it('opens the selected alighting stop on the map', () => {
+    const alightingStop: Stop = {
+      stop: 'DEST0001', name_en: 'Destination Stop', name_tc: '目的地站', name_sc: '目的地站',
+      lat: 22.31, long: 114.21, data_timestamp: '',
+    };
+    renderCard([], [match], { DEST0001: { en: 'Destination Stop', tc: '目的地站' } }, {
+      destinationStops: { DEST0001: alightingStop },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '在地圖上查看目的地站' }));
+    expect(screen.getByRole('dialog').textContent).toBe('目的地站');
   });
 });
 

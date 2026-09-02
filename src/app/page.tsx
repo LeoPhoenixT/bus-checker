@@ -86,6 +86,12 @@ function BusCheckerApp() {
       { en: stop.name_en, tc: stop.name_tc },
     ])),
   ), [destinationCandidates]);
+  const destinationStopsById = useMemo(() => Object.fromEntries(
+    destinationCandidates.flatMap((stop) => getStopIds(stop).map((stopId) => [
+      stopId.toUpperCase(),
+      stop,
+    ])),
+  ), [destinationCandidates]);
   const {
     matchesByOriginStop,
     loading: directRoutesLoading,
@@ -299,6 +305,7 @@ function BusCheckerApp() {
                   etasLoading={etaLoading && lastRefreshed === null}
                   destinationMatches={destinationActive ? groupedMatchesByOriginStop[stop.stop] ?? [] : undefined}
                   destinationStopNames={destinationStopNames}
+                  destinationStops={destinationStopsById}
                   favouriteRoutes={favoriteRoutes}
                   favouritesOnly={favouritesOnly}
                 />
