@@ -57,6 +57,7 @@ export function matchDirectRoutes(
       const key = variantKey(boarding);
       for (const alighting of destinationOccurrencesByVariant.get(key) ?? []) {
         if (boarding.seq >= alighting.seq) continue;
+        if (normalize(boarding.stop) === normalize(alighting.stop)) continue;
 
         const candidate: DirectRouteMatch = {
           route: normalize(boarding.route),

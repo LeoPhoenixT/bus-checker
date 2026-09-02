@@ -66,18 +66,12 @@ describe('matchDirectRoutes', () => {
     });
   });
 
-  it('matches a circular journey when the same stop occurs again later', () => {
-    const result = matchDirectRoutes(
+  it('rejects a circular journey that returns to the same stop ID', () => {
+    expect(matchDirectRoutes(
       [occurrence('LOOPSTOP', 1), occurrence('MIDSTOP1', 5), occurrence('LOOPSTOP', 10)],
       ['LOOPSTOP'],
       ['LOOPSTOP'],
-    );
-
-    expect(result.LOOPSTOP[0]).toMatchObject({
-      boardingSeq: 1,
-      alightingStop: 'LOOPSTOP',
-      alightingSeq: 10,
-    });
+    )).toEqual({});
   });
 
   it('rejects a zero-length circular journey with only one stop occurrence', () => {
