@@ -14,4 +14,11 @@ export const APP_CONFIG = {
 
   /** ETA auto-refresh interval in milliseconds */
   REFRESH_INTERVAL_MS: 30_000,
+
+  /**
+   * A single KMB stop request must not prevent the rest of a refresh from
+   * completing forever. Keep this comfortably below the auto-refresh period
+   * so a timed-out stop can be retried on the next refresh.
+   */
+  ETA_REQUEST_TIMEOUT_MS: 12_000,
 } as const;

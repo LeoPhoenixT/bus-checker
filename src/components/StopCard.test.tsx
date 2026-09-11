@@ -147,3 +147,45 @@ describe('StopCard favourite route filtering', () => {
     expect(screen.queryByText('74B')).toBeNull();
   });
 });
+
+describe('StopCard ETA freshness', () => {
+  it('labels stale predictions and removes their confident live colour', () => {
+    const lastSuccessfulAt = new Date(Date.now() - 130_000);
+    const upcoming = eta({ eta: new Date(Date.now() + 120_000).toISOString() });
+    renderCard([upcoming], undefined, {}, {
+      etaStates: {
+        ORIGIN01: {
+          data: [upcoming],
+          lastSuccessfulAt,
+          lastAttemptAt: lastSuccessfulAt,
+          attemptStatus: 'error',
+          error: 'Temporary API error',
+          freshness: 'stale',
+        },
+      },
+    });
+
+    expect(screen.getByText('到站時間可能已過時', { exact: false })).toBeDefined();
+    expect(screen.getByText('1 分').className).toContain('text-[var(--muted)]');
+  });
+
+  it('does not present five-minute-old predictions as live ETA', () => {
+    const lastSuccessfulAt = new Date(Date.now() - 301_000);
+    const upcoming = eta({ eta: new Date(Date.now() + 120_000).toISOString() });
+    renderCard([upcoming], undefined, {}, {
+      etaStates: {
+        ORIGIN01: {
+          data: [upcoming],
+          lastSuccessfulAt,
+          lastAttemptAt: lastSuccessfulAt,
+          attemptStatus: 'error',
+          error: 'Temporary API error',
+          freshness: 'very-stale',
+        },
+      },
+    });
+
+    expect(screen.getByText('暫未能提供到站時間', { exact: false })).toBeDefined();
+    expect(screen.queryByText('1 分')).toBeNull();
+  });
+});

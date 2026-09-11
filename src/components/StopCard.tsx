@@ -6,6 +6,9 @@ import { useLang } from '@/contexts/LanguageContext';
 import { ETARow } from './ETARow';
 import { StopLocationModal } from './StopLocationModal';
 import { filterEligibleETAs } from '@/lib/etaEligibility';
+import type { ETAFreshness } from '@/lib/etaFreshness';
+import type { StopETAStateWithFreshness } from '@/hooks/useStopETAs';
+import { getStopIds } from '@/lib/stopGroups';
 import type { DirectRouteMatch, DestinationStopNames, NearbyStop, ETAEntry, Stop } from '@/lib/types';
 
 interface StopCardProps {
@@ -18,6 +21,7 @@ interface StopCardProps {
   destinationStops?: Record<string, Stop>;
   favouriteRoutes?: Set<string>;
   favouritesOnly?: boolean;
+  etaStates?: Record<string, StopETAStateWithFreshness>;
 }
 
 interface RouteGroup {
@@ -40,10 +44,39 @@ export function StopCard({
   destinationStops,
   favouriteRoutes = new Set(),
   favouritesOnly = false,
+  etaStates = {},
 }: StopCardProps) {
   const { lang } = useLang();
   const [mapStop, setMapStop] = useState<Stop | null>(null);
   const name = lang === 'en' ? stop.name_en : stop.name_tc;
+  const stopStates = getStopIds(stop)
+    .map((stopId) => etaStates[stopId.trim().toUpperCase()])
+    .filter((state): state is StopETAStateWithFreshness => Boolean(state));
+
+  const freshnessPriority: Record<ETAFreshness, number> = {
+    fresh: 0,
+    'slightly-old': 1,
+    stale: 2,
+    'very-stale': 3,
+    unavailable: 4,
+  };
+  const statesWithSuccessfulData = stopStates.filter((state) => state.lastSuccessfulAt !== null);
+  const stopFreshness = statesWithSuccessfulData.length === 0
+    ? stopStates.length === 0 ? 'fresh' : 'unavailable'
+    : statesWithSuccessfulData.reduce<ETAFreshness>((leastFresh, state) => (
+      freshnessPriority[state.freshness] > freshnessPriority[leastFresh] ? state.freshness : leastFresh
+    ), 'fresh');
+  const stopLastSuccessfulAt = stopStates.reduce<Date | null>((oldest, state) => {
+    if (!state.lastSuccessfulAt) return oldest;
+    if (!oldest || state.lastSuccessfulAt < oldest) return state.lastSuccessfulAt;
+    return oldest;
+  }, null);
+  const stopETALoading = stopStates.some(
+    (state) => state.attemptStatus === 'loading' && state.lastSuccessfulAt === null,
+  );
+  const stopETAUnavailable = stopStates.length > 0
+    && statesWithSuccessfulData.length === 0
+    && !stopETALoading;
 
   /* Group ETAs by route+direction (merging service types), keep up to 3 eta_seq per group */
   const grouped = new Map<string, RouteGroup>();
@@ -144,7 +177,11 @@ export function StopCard({
             </div>
           ))
         ) : finalKeys.length === 0 ? (
-          <p className="py-3 text-sm text-[var(--muted)] text-center">{lang === 'en' ? 'No arrivals available' : '暫無班次資料'}</p>
+          <p className="py-3 text-sm text-[var(--muted)] text-center">
+            {stopETAUnavailable
+              ? lang === 'en' ? 'ETA unavailable' : '暫未能取得到站時間'
+              : lang === 'en' ? 'No arrivals available' : '暫無班次資料'}
+          </p>
         ) : (
           finalKeys.map((key) => (
             <ETARow
@@ -155,6 +192,9 @@ export function StopCard({
               destinationStopNames={destinationStopNames}
               destinationStops={destinationStops}
               onViewAlightingStop={setMapStop}
+              freshness={stopFreshness}
+              lastSuccessfulAt={stopLastSuccessfulAt}
+              etaLoading={stopETALoading}
             />
           ))
         )}

@@ -6,8 +6,15 @@ export async function fetchAllStops(): Promise<StopListResponse> {
   return res.json() as Promise<StopListResponse>;
 }
 
-export async function fetchStopETAs(stopId: string): Promise<StopETAResponse> {
-  const res = await fetch(`/api/stop-eta/${encodeURIComponent(stopId)}`);
+export interface FetchStopETAOptions {
+  signal?: AbortSignal;
+}
+
+export async function fetchStopETAs(
+  stopId: string,
+  { signal }: FetchStopETAOptions = {},
+): Promise<StopETAResponse> {
+  const res = await fetch(`/api/stop-eta/${encodeURIComponent(stopId)}`, { signal });
   if (!res.ok) throw new Error(`Failed to fetch ETAs for ${stopId}: ${res.status}`);
   return res.json() as Promise<StopETAResponse>;
 }

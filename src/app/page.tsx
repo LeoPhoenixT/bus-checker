@@ -117,7 +117,15 @@ function BusCheckerApp() {
     return visibleStops.flatMap(getStopIds);
   }, [destinationActive, directRoutesError, directRoutesLoading, stops, visibleStops]);
 
-  const { etasMap, lastRefreshed, loading: etaLoading, refresh } = useStopETAs(stopIds);
+  const {
+    etasMap,
+    etaStates,
+    lastRefreshed,
+    lastAttemptAt,
+    failedStopCount,
+    loading: etaLoading,
+    refresh,
+  } = useStopETAs(stopIds);
   const groupedEtasMap = useMemo(() => Object.fromEntries(
     stops.map((stop) => [
       stop.stop,
@@ -302,12 +310,16 @@ function BusCheckerApp() {
                   stop={stop}
                   etas={groupedEtasMap[stop.stop] ?? []}
                   routeFilters={routeFilters}
-                  etasLoading={etaLoading && lastRefreshed === null}
+                  etasLoading={getStopIds(stop).some((stopId) => {
+                    const etaState = etaStates[stopId.toUpperCase()];
+                    return etaState?.attemptStatus === 'loading' && etaState.lastSuccessfulAt === null;
+                  })}
                   destinationMatches={destinationActive ? groupedMatchesByOriginStop[stop.stop] ?? [] : undefined}
                   destinationStopNames={destinationStopNames}
                   destinationStops={destinationStopsById}
                   favouriteRoutes={favoriteRoutes}
                   favouritesOnly={favouritesOnly}
+                  etaStates={etaStates}
                 />
               ))}
             </div>
@@ -317,7 +329,13 @@ function BusCheckerApp() {
 
       {/* ── Refresh Indicator ── */}
       {hasCoords && !geoError && (
-        <RefreshIndicator lastRefreshed={lastRefreshed} loading={etaLoading} onRefresh={refresh} />
+        <RefreshIndicator
+          lastRefreshed={lastRefreshed}
+          lastAttemptAt={lastAttemptAt}
+          failedStopCount={failedStopCount}
+          loading={etaLoading}
+          onRefresh={refresh}
+        />
       )}
 
       {/* ── Favourite Sidebar ── */}

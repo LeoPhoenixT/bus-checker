@@ -5,6 +5,8 @@ import clsx from 'clsx';
 import { useLang } from '@/contexts/LanguageContext';
 import { useBookmarks } from '@/contexts/BookmarkContext';
 import type { DestinationStopNames, ETAEntry, Stop } from '@/lib/types';
+import type { ETAFreshness } from '@/lib/etaFreshness';
+import { getETAAgeSeconds } from '@/lib/etaFreshness';
 
 interface ETARowProps {
   route: string;
@@ -13,6 +15,9 @@ interface ETARowProps {
   destinationStopNames?: DestinationStopNames;
   destinationStops?: Record<string, Stop>;
   onViewAlightingStop?: (stop: Stop) => void;
+  freshness?: ETAFreshness;
+  lastSuccessfulAt?: Date | null;
+  etaLoading?: boolean;
 }
 
 export function getMinutesUntil(etaIso: string): number {
@@ -44,6 +49,9 @@ export function ETARow({
   destinationStopNames = {},
   destinationStops = {},
   onViewAlightingStop,
+  freshness = 'fresh',
+  lastSuccessfulAt = null,
+  etaLoading = false,
 }: ETARowProps) {
   const { lang } = useLang();
   const { isBookmarked, toggleBookmark } = useBookmarks();
@@ -76,6 +84,27 @@ export function ETARow({
   const timeUnit = lang === 'en' ? 'min' : '分';
   const arrivingNow = lang === 'en' ? 'Arriving' : '即將到達';
   const departed = lang === 'en' ? 'Departed' : '已離站';
+  const ageSeconds = getETAAgeSeconds(lastSuccessfulAt);
+  const ageLabel = ageSeconds === null
+    ? null
+    : ageSeconds < 60
+      ? (lang === 'en' ? `${ageSeconds}s ago` : `${ageSeconds} 秒前`)
+      : (lang === 'en' ? `${Math.floor(ageSeconds / 60)} min ago` : `${Math.floor(ageSeconds / 60)} 分鐘前`);
+  const hidesLiveETA = !etaLoading && (freshness === 'very-stale' || freshness === 'unavailable');
+
+  const freshnessNotice = etaLoading && lastSuccessfulAt === null
+    ? (lang === 'en' ? 'Loading ETA…' : '正在載入到站時間…')
+    : freshness === 'slightly-old'
+    ? (lang === 'en' ? `Updated ${ageLabel}` : `${ageLabel}更新`)
+    : freshness === 'stale'
+      ? (lang === 'en' ? `ETA may be outdated · Updated ${ageLabel}` : `到站時間可能已過時 · ${ageLabel}更新`)
+      : freshness === 'very-stale'
+        ? (lang === 'en'
+          ? `ETA unavailable${ageLabel ? ` · Last updated ${ageLabel}` : ''}`
+          : `暫未能提供到站時間${ageLabel ? ` · 最後更新於 ${ageLabel}` : ''}`)
+        : freshness === 'unavailable'
+          ? (lang === 'en' ? 'ETA unavailable' : '暫未能提供到站時間')
+          : null;
 
   // Handle bookmark toggle
   const handleBookmarkClick = () => {
@@ -84,6 +113,14 @@ export function ETARow({
 
   // Render primary (nearest) ETA badge
   const renderPrimaryBadge = () => {
+    if (etaLoading && lastSuccessfulAt === null) {
+      return <span className="text-xs text-[var(--muted)]">…</span>;
+    }
+
+    if (hidesLiveETA) {
+      return <span className="text-xs font-medium text-[var(--muted)]">{lang === 'en' ? 'Unavailable' : '暫未能提供'}</span>;
+    }
+
     if (!nearest) return <span className="text-xs text-[var(--muted)]">—</span>;
 
     if (nearest.minutes === null) {
@@ -95,6 +132,13 @@ export function ETARow({
     }
 
     if (nearest.minutes === 0) {
+      if (freshness === 'stale') {
+        return (
+          <span className="rounded-full border border-[var(--divider)] bg-[var(--card-border)] px-2.5 py-0.5 text-xs font-bold text-[var(--muted)]">
+            {arrivingNow}
+          </span>
+        );
+      }
       return (
         <span className="animate-pulse rounded-full border border-red-500/40 bg-red-500/20 px-2.5 py-0.5 text-xs font-bold text-red-500 dark:text-red-400">
           {arrivingNow}
@@ -106,11 +150,13 @@ export function ETARow({
       <span
         className={clsx(
           'rounded-full border px-2.5 py-0.5 text-xs font-bold tabular-nums',
-          nearest.minutes <= 2
-            ? 'border-red-500/40 bg-red-500/15 text-red-600 dark:text-red-400'
-            : nearest.minutes <= 5
-              ? 'border-amber-500/40 bg-amber-500/15 text-amber-600 dark:text-amber-400'
-              : 'border-green-500/40 bg-green-500/15 text-green-600 dark:text-green-400',
+          freshness === 'stale'
+            ? 'border-[var(--divider)] bg-[var(--card-border)] text-[var(--muted)]'
+            : nearest.minutes <= 2
+              ? 'border-red-500/40 bg-red-500/15 text-red-600 dark:text-red-400'
+              : nearest.minutes <= 5
+                ? 'border-amber-500/40 bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                : 'border-green-500/40 bg-green-500/15 text-green-600 dark:text-green-400',
         )}
       >
         {nearest.minutes} {timeUnit}
@@ -163,8 +209,18 @@ export function ETARow({
             ))}
           </p>
         )}
+        {freshnessNotice && (
+          <p className={clsx(
+            'mt-0.5 text-[11px] leading-snug',
+            freshness === 'stale' || freshness === 'very-stale' || freshness === 'unavailable'
+              ? 'text-amber-700 dark:text-amber-300'
+              : 'text-[var(--muted)]',
+          )}>
+            {freshnessNotice}
+          </p>
+        )}
         {/* Later arrival times shown as smaller text beneath */}
-        {later.length > 0 && (
+        {!hidesLiveETA && later.length > 0 && (
           <p className="mt-0.5 flex flex-wrap gap-1.5">
             {later.map((t, i) => {
               const rmk = lang === 'en' ? t.rmk_en : t.rmk_tc;
