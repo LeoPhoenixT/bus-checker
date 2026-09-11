@@ -2,15 +2,16 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Bus, ChevronDown, ChevronUp, RefreshCw, Route as RouteIcon } from 'lucide-react';
+import { ArrowLeft, Bus, ChevronDown, ChevronUp, Heart, RefreshCw, Route as RouteIcon } from 'lucide-react';
 import clsx from 'clsx';
 import { useLang } from '@/contexts/LanguageContext';
+import { useFavourites } from '@/contexts/FavouriteContext';
 import { useStopETAs } from '@/hooks/useStopETAs';
 import { fetchRouteDetail } from '@/lib/kmb';
 import { getETAAgeSeconds } from '@/lib/etaFreshness';
 import { filterRouteVariantETAs } from '@/lib/routeEta';
 import { getMinutesUntil } from '@/lib/etaTime';
-import type { ETAEntry, RouteDetail, RouteDetailStop, RouteVariant } from '@/lib/types';
+import type { ETAEntry, FavouriteRouteStop, RouteDetail, RouteDetailStop, RouteVariant } from '@/lib/types';
 import { LanguageToggle } from './LanguageToggle';
 import { PrimaryNavigation } from './PrimaryNavigation';
 import { RefreshIndicator } from './RefreshIndicator';
@@ -69,6 +70,14 @@ function SelectedStopETA({
   lastSuccessfulAt: Date | null;
 }) {
   const { lang } = useLang();
+  const { isFavourite, toggleFavourite } = useFavourites();
+  const favourite: FavouriteRouteStop = {
+    route: detail.variant.route,
+    bound: detail.variant.bound,
+    serviceType: detail.variant.serviceType,
+    stopId: stop.stopId,
+  };
+  const saved = isFavourite(favourite);
   const liveETAs = filterRouteVariantETAs(etas, detail.variant, stop.stopId);
   const shouldHideTimes = freshness === 'very-stale' || freshness === 'unavailable';
   const arrivals = liveETAs
@@ -120,6 +129,22 @@ function SelectedStopETA({
         </div>
       )}
       {status && <p className={clsx('mt-2 text-[11px]', freshness === 'stale' || freshness === 'very-stale' || freshness === 'unavailable' ? 'text-amber-700 dark:text-amber-300' : 'text-[var(--muted)]')}>{status}</p>}
+      <button
+        type="button"
+        onClick={() => toggleFavourite(favourite)}
+        className={clsx(
+          'mt-3 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition',
+          saved
+            ? 'border-rose-500/35 bg-rose-500/10 text-rose-700 hover:bg-rose-500/15 dark:text-rose-300'
+            : 'border-[var(--divider)] bg-[var(--card-bg)] text-[var(--foreground)] hover:border-rose-500/35 hover:bg-rose-500/10',
+        )}
+        aria-label={saved
+          ? (lang === 'en' ? 'Remove from favourites' : '移除收藏')
+          : (lang === 'en' ? 'Add to favourites' : '加入收藏')}
+      >
+        <Heart className={clsx('h-3.5 w-3.5', saved && 'fill-current')} />
+        {saved ? (lang === 'en' ? 'Saved' : '已收藏') : (lang === 'en' ? 'Add to favourites' : '加入收藏')}
+      </button>
     </div>
   );
 }

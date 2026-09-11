@@ -70,6 +70,22 @@ export interface RouteVariant extends RouteVariantId {
   isSpecial: boolean;
 }
 
+/**
+ * A favourite is a specific place to board a specific KMB route variant.
+ * Display labels deliberately live elsewhere: they can change without
+ * changing the durable identity.
+ */
+export interface FavouriteRouteStop extends RouteVariantId {
+  stopId: string;
+}
+
+export interface FavouriteRouteStopMetadata {
+  favourite: FavouriteRouteStop;
+  status: 'resolved' | 'missing' | 'unavailable';
+  variant?: RouteVariant;
+  stop?: RouteDetailStop;
+}
+
 export interface RouteDetailStop {
   stopId: string;
   seq: number;

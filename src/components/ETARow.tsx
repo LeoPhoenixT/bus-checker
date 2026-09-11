@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { MapPin } from 'lucide-react';
 import clsx from 'clsx';
 import { useLang } from '@/contexts/LanguageContext';
-import { useBookmarks } from '@/contexts/BookmarkContext';
 import type { DestinationStopNames, ETAEntry, Stop } from '@/lib/types';
 import type { ETAFreshness } from '@/lib/etaFreshness';
 import { getETAAgeSeconds } from '@/lib/etaFreshness';
@@ -62,7 +61,6 @@ export function ETARow({
   etaLoading = false,
 }: ETARowProps) {
   const { lang } = useLang();
-  const { isBookmarked, toggleBookmark } = useBookmarks();
 
   const first = etas[0];
   const dest = first ? (lang === 'en' ? first.dest_en : first.dest_tc) : '';
@@ -118,11 +116,6 @@ export function ETARow({
         : freshness === 'unavailable'
           ? (lang === 'en' ? 'ETA unavailable' : '暫未能提供到站時間')
           : null;
-
-  // Handle bookmark toggle
-  const handleBookmarkClick = () => {
-    toggleBookmark(route);
-  };
 
   // Render primary (nearest) ETA badge
   const renderPrimaryBadge = () => {
@@ -268,16 +261,6 @@ export function ETARow({
       {/* Nearest arrival badge */}
       <div className="shrink-0">{renderPrimaryBadge()}</div>
 
-      {/* Bookmark star icon */}
-      <button
-        onClick={handleBookmarkClick}
-        className="shrink-0 text-lg transition-all hover:scale-110 active:scale-95"
-        aria-label={isBookmarked(route)
-          ? lang === 'en' ? 'Remove bookmark' : '移除收藏'
-          : lang === 'en' ? 'Add bookmark' : '加入收藏'}
-      >
-        {isBookmarked(route) ? '⭐' : '☆'}
-      </button>
     </div>
   );
 }

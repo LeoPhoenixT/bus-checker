@@ -1,4 +1,4 @@
-import type { RouteDetail, RouteSearchResult, StopListResponse, StopETAResponse } from './types';
+import type { FavouriteRouteStop, FavouriteRouteStopMetadata, RouteDetail, RouteSearchResult, StopListResponse, StopETAResponse } from './types';
 
 export async function fetchAllStops(): Promise<StopListResponse> {
   const res = await fetch('/api/stops');
@@ -36,4 +36,19 @@ export async function fetchRouteDetail(
   const res = await fetch(`/api/routes/${encodeURIComponent(route)}?${params}`, { signal });
   if (!res.ok) throw new Error(`Failed to fetch route detail: ${res.status}`);
   return res.json() as Promise<RouteDetail>;
+}
+
+export async function fetchFavouriteRouteStopMetadata(
+  items: FavouriteRouteStop[],
+  { signal }: FetchStopETAOptions = {},
+): Promise<FavouriteRouteStopMetadata[]> {
+  const res = await fetch('/api/favourite-route-stops', {
+    method: 'POST',
+    signal,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  });
+  if (!res.ok) throw new Error(`Failed to resolve favourites: ${res.status}`);
+  const body = await res.json() as Partial<{ items: FavouriteRouteStopMetadata[] }>;
+  return body.items ?? [];
 }

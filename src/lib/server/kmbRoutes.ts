@@ -2,7 +2,7 @@ import { fetchKmbRouteStops, KmbRouteStopsError } from './kmbRouteStops';
 import { KMB_API_BASE } from './kmb';
 import { getKmbServiceDay } from './kmbServiceDay';
 import { findReverseVariants, isSpecialService, normalizeRouteQuery, routeVariantKey, sortRouteVariants } from '@/lib/routeVariants';
-import type { RouteDetail, RouteDetailStop, RouteVariant, Stop } from '@/lib/types';
+import type { FavouriteRouteStop, FavouriteRouteStopMetadata, RouteDetail, RouteDetailStop, RouteVariant, Stop } from '@/lib/types';
 
 const ROUTES_URL = `${KMB_API_BASE}/route/`;
 const STOPS_URL = `${KMB_API_BASE}/stop`;
@@ -234,6 +234,29 @@ export async function getKmbRouteDetail(
     stops: orderedStops,
     reverseVariants: findReverseVariants(variant, variants),
   };
+}
+
+/**
+ * Resolve saved boarding points in one server request. Each favourite is
+ * independent: an obsolete variant must not hide the other daily-use cards.
+ */
+export async function getKmbFavouriteRouteStopMetadata(
+  favourites: FavouriteRouteStop[],
+): Promise<FavouriteRouteStopMetadata[]> {
+  const details = await Promise.allSettled(favourites.map((favourite) => (
+    getKmbRouteDetail(favourite.route, favourite.bound, favourite.serviceType)
+  )));
+  if (details.length > 0 && details.every((result) => result.status === 'rejected')) {
+    throw details.find((result): result is PromiseRejectedResult => result.status === 'rejected')!.reason;
+  }
+  return details.map((result, index) => {
+    const favourite = favourites[index];
+    if (result.status !== 'fulfilled') return { favourite, status: 'unavailable' };
+    if (result.value === null) return { favourite, status: 'missing' };
+    const stop = result.value.stops.find((item) => item.stopId === favourite.stopId);
+    if (!stop) return { favourite, status: 'missing' };
+    return { favourite, status: 'resolved', variant: result.value.variant, stop };
+  });
 }
 
 /** Reset process-local caches between isolated unit tests. */

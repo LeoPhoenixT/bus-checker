@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { MapPin, Search } from 'lucide-react';
+import { Heart, MapPin, Search } from 'lucide-react';
 import clsx from 'clsx';
 import { usePathname } from 'next/navigation';
 import { useLang } from '@/contexts/LanguageContext';
@@ -9,6 +9,7 @@ import { useLang } from '@/contexts/LanguageContext';
 const links = [
   { href: '/', icon: MapPin, key: 'nearby' as const },
   { href: '/routes', icon: Search, key: 'routes' as const },
+  { href: '/favourites', icon: Heart, key: 'favourites' as const },
 ];
 
 export function PrimaryNavigation() {
@@ -19,8 +20,8 @@ export function PrimaryNavigation() {
     <>
       <nav className="hidden sm:flex items-center gap-1" aria-label={lang === 'en' ? 'Primary navigation' : '主要導覽'}>
         {links.map(({ href, icon: Icon, key }) => {
-          const active = key === 'nearby' ? pathname === '/' : pathname.startsWith('/routes');
-          const label = key === 'nearby' ? (lang === 'en' ? 'Nearby' : '附近') : (lang === 'en' ? 'Routes' : '路線');
+          const active = key === 'nearby' ? pathname === '/' : key === 'routes' ? pathname.startsWith('/routes') : pathname.startsWith('/favourites');
+          const label = key === 'nearby' ? (lang === 'en' ? 'Nearby' : '附近') : key === 'routes' ? (lang === 'en' ? 'Routes' : '路線') : (lang === 'en' ? 'Favourites' : '收藏');
           return (
             <Link
               key={href}
@@ -42,8 +43,8 @@ export function PrimaryNavigation() {
         aria-label={lang === 'en' ? 'Primary navigation' : '主要導覽'}
       >
         {links.map(({ href, icon: Icon, key }) => {
-          const active = key === 'nearby' ? pathname === '/' : pathname.startsWith('/routes');
-          const label = key === 'nearby' ? (lang === 'en' ? 'Nearby' : '附近') : (lang === 'en' ? 'Routes' : '路線');
+          const active = key === 'nearby' ? pathname === '/' : key === 'routes' ? pathname.startsWith('/routes') : pathname.startsWith('/favourites');
+          const label = key === 'nearby' ? (lang === 'en' ? 'Nearby' : '附近') : key === 'routes' ? (lang === 'en' ? 'Routes' : '路線') : (lang === 'en' ? 'Favourites' : '收藏');
           return (
             <Link
               key={href}

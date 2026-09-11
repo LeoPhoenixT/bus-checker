@@ -1,4 +1,4 @@
-import type { ETAEntry, RouteVariant } from './types';
+import type { ETAEntry, FavouriteRouteStop, RouteVariant } from './types';
 
 /** Keep only ETA records for the exact route variant and selected boarding stop. */
 export function filterRouteVariantETAs(
@@ -17,6 +17,21 @@ export function filterRouteVariantETAs(
       // Ignore malformed/non-stop records instead of crashing Route Detail.
       && typeof eta.stop === 'string'
       && eta.stop.trim().toUpperCase() === normalizedStopId
+    ))
+    .sort((a, b) => a.eta_seq - b.eta_seq);
+}
+
+/** Keep ETA for a saved exact boarding point without relying on display metadata. */
+export function filterFavouriteRouteStopETAs(etas: ETAEntry[], favourite: FavouriteRouteStop): ETAEntry[] {
+  const stopId = favourite.stopId.trim().toUpperCase();
+  return etas
+    .filter((eta) => (
+      typeof eta.route === 'string'
+      && eta.route.trim().toUpperCase() === favourite.route
+      && eta.dir === favourite.bound
+      && String(eta.service_type).trim().toUpperCase() === favourite.serviceType
+      && typeof eta.stop === 'string'
+      && eta.stop.trim().toUpperCase() === stopId
     ))
     .sort((a, b) => a.eta_seq - b.eta_seq);
 }

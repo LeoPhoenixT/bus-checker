@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterRouteVariantETAs } from './routeEta';
+import { filterFavouriteRouteStopETAs, filterRouteVariantETAs } from './routeEta';
 import type { ETAEntry, RouteVariant } from './types';
 
 function eta(overrides: Partial<ETAEntry>): ETAEntry {
@@ -33,5 +33,18 @@ describe('filterRouteVariantETAs', () => {
   it('ignores malformed upstream records without crashing', () => {
     const malformed = eta({ stop: undefined as unknown as string });
     expect(filterRouteVariantETAs([malformed, eta({})], variant, 'STOPA')).toHaveLength(1);
+  });
+});
+
+describe('filterFavouriteRouteStopETAs', () => {
+  it('keeps only the exact saved route, direction, service type and stop', () => {
+    const favourite = { route: '87D', bound: 'O' as const, serviceType: '3', stopId: 'STOPA' };
+    const result = filterFavouriteRouteStopETAs([
+      eta({}),
+      eta({ service_type: '1' }),
+      eta({ stop: 'STOP2' }),
+      eta({ route: '87X' }),
+    ], favourite);
+    expect(result).toEqual([eta({})]);
   });
 });

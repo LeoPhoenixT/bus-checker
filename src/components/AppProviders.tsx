@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { BookmarkProvider } from '@/contexts/BookmarkContext';
+import { FavouriteProvider } from '@/contexts/FavouriteContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 
@@ -9,7 +9,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider>
       <LanguageProvider>
-        <BookmarkProvider>{children}</BookmarkProvider>
+        <FavouriteProvider>{children}</FavouriteProvider>
       </LanguageProvider>
     </ThemeProvider>
   );

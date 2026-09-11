@@ -1,6 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BookmarkProvider } from '@/contexts/BookmarkContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { StopCard } from './StopCard';
 import type { DirectRouteMatch, ETAEntry, NearbyStop, Stop } from '@/lib/types';
@@ -39,8 +38,7 @@ function renderCard(
   props: Partial<React.ComponentProps<typeof StopCard>> = {},
 ) {
   return render(
-    <BookmarkProvider>
-      <LanguageProvider>
+    <LanguageProvider>
         <StopCard
           stop={stop}
           etas={etas}
@@ -50,8 +48,7 @@ function renderCard(
           destinationStopNames={destinationStopNames}
           {...props}
         />
-      </LanguageProvider>
-    </BookmarkProvider>,
+    </LanguageProvider>,
   );
 }
 
@@ -121,50 +118,6 @@ describe('StopCard destination eligibility', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '在地圖上查看目的地站' }));
     expect(screen.getByRole('dialog').textContent).toBe('目的地站');
-  });
-});
-
-describe('StopCard favourite route filtering', () => {
-  it('leaves normal routes visible when disabled', () => {
-    renderCard([eta(), eta({ route: '74B' })], undefined, {}, { favouritesOnly: false });
-    expect(screen.getByText('88X')).toBeDefined();
-    expect(screen.getByText('74B')).toBeDefined();
-  });
-
-  it('keeps only favourite routes in a mixed stop', () => {
-    renderCard([eta(), eta({ route: '74B' })], undefined, {}, {
-      favouritesOnly: true,
-      favouriteRoutes: new Set(['74B']),
-    });
-    expect(screen.getByText('74B')).toBeDefined();
-    expect(screen.queryByText('88X')).toBeNull();
-    expect(screen.getByText('ORIGIN01')).toBeDefined();
-  });
-
-  it('hides a stop with no favourite routes', () => {
-    renderCard([eta()], undefined, {}, {
-      favouritesOnly: true,
-      favouriteRoutes: new Set(['74B']),
-    });
-    expect(screen.queryByText('ORIGIN01')).toBeNull();
-  });
-
-  it('combines favourite and route-number filters with AND', () => {
-    renderCard([eta(), eta({ route: '74B' })], undefined, {}, {
-      routeFilters: ['74'],
-      favouritesOnly: true,
-      favouriteRoutes: new Set(['88X']),
-    });
-    expect(screen.queryByText('ORIGIN01')).toBeNull();
-  });
-
-  it('filters destination-valid routes, including routes without live ETA', () => {
-    renderCard([], [match, { ...match, route: '74B' }], {}, {
-      favouritesOnly: true,
-      favouriteRoutes: new Set(['88X']),
-    });
-    expect(screen.getByText('88X')).toBeDefined();
-    expect(screen.queryByText('74B')).toBeNull();
   });
 });
 

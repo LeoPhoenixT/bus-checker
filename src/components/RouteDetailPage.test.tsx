@@ -1,6 +1,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LanguageProvider } from '@/contexts/LanguageContext';
+import { FavouriteProvider } from '@/contexts/FavouriteContext';
+import { FAVOURITES_STORAGE_KEY } from '@/lib/favourites';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { RouteDetailPage } from './RouteDetailPage';
 import type { ETAEntry, RouteDetail, RouteVariant } from '@/lib/types';
@@ -54,7 +56,7 @@ function response(data: ETAEntry[]) {
 function renderPage() {
   return render(
     <ThemeProvider>
-      <LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" /></LanguageProvider>
+      <FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" /></LanguageProvider></FavouriteProvider>
     </ThemeProvider>,
   );
 }
@@ -66,6 +68,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  localStorage.clear();
   vi.clearAllMocks();
   vi.useRealTimers();
 });
@@ -105,7 +108,7 @@ describe('RouteDetailPage', () => {
     fetchStopETAsMock.mockResolvedValue(response([eta({ stop: 'STOP2', seq: 2 })]));
     render(
       <ThemeProvider>
-        <LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="stop2" /></LanguageProvider>
+        <FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="stop2" /></LanguageProvider></FavouriteProvider>
       </ThemeProvider>,
     );
 
@@ -119,7 +122,7 @@ describe('RouteDetailPage', () => {
     fetchRouteDetailMock.mockResolvedValue(detail());
     render(
       <ThemeProvider>
-        <LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="NOT-ON-THIS-VARIANT" /></LanguageProvider>
+        <FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="NOT-ON-THIS-VARIANT" /></LanguageProvider></FavouriteProvider>
       </ThemeProvider>,
     );
 
@@ -132,7 +135,7 @@ describe('RouteDetailPage', () => {
     fetchRouteDetailMock.mockResolvedValue(detail());
     fetchStopETAsMock.mockResolvedValue(response([]));
     const { rerender } = render(
-      <ThemeProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="STOP1" /></LanguageProvider></ThemeProvider>,
+      <ThemeProvider><FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="STOP1" /></LanguageProvider></FavouriteProvider></ThemeProvider>,
     );
     await waitFor(() => expect(screen.getByText('查看反方向')).toBeDefined());
     const reverseLink = screen.getByRole('link', { name: '查看反方向' });
@@ -142,7 +145,7 @@ describe('RouteDetailPage', () => {
     const alternate: RouteVariant = { ...reverseVariant, serviceType: '1', isSpecial: false, destinationTc: '錦英苑', destinationEn: 'Kam Ying Court' };
     fetchRouteDetailMock.mockResolvedValue(detail([reverseVariant, alternate]));
     rerender(
-      <ThemeProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="1" /></LanguageProvider></ThemeProvider>,
+      <ThemeProvider><FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="1" /></LanguageProvider></FavouriteProvider></ThemeProvider>,
     );
     await waitFor(() => expect(screen.getAllByText('查看反方向').some((element) => element.tagName === 'SUMMARY')).toBe(true));
     fireEvent.click(screen.getAllByText('查看反方向').find((element) => element.tagName === 'SUMMARY')!);
@@ -155,7 +158,7 @@ describe('RouteDetailPage', () => {
       .mockRejectedValueOnce(new Error('Failed to fetch route detail: 503'))
       .mockResolvedValueOnce(detail());
     render(
-      <ThemeProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" searchQuery="87" /></LanguageProvider></ThemeProvider>,
+      <ThemeProvider><FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" searchQuery="87" /></LanguageProvider></FavouriteProvider></ThemeProvider>,
     );
     await waitFor(() => expect(screen.getByText('暫時無法載入路線資料')).toBeDefined());
     expect(screen.getByRole('link', { name: '返回路線搜尋' }).getAttribute('href')).toBe('/routes?q=87');
@@ -179,5 +182,20 @@ describe('RouteDetailPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /第二站/ }));
     await waitFor(() => expect(screen.getByText('暫未能提供即時到站時間')).toBeDefined());
     expect(screen.getByText('暫未能提供到站時間')).toBeDefined();
+  });
+
+  it('offers a route-stop favourite action only after a valid topology stop is selected', async () => {
+    fetchRouteDetailMock.mockResolvedValue(detail());
+    fetchStopETAsMock.mockResolvedValue(response([eta()]));
+    renderPage();
+    await waitFor(() => expect(screen.getByText('第一站')).toBeDefined());
+    expect(screen.queryByRole('button', { name: '加入收藏' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /第一站/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '加入收藏' })).toBeDefined());
+    fireEvent.click(screen.getByRole('button', { name: '加入收藏' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '移除收藏' })).toBeDefined());
+    expect(JSON.parse(localStorage.getItem(FAVOURITES_STORAGE_KEY)!).items).toEqual([
+      { route: '87D', bound: 'O', serviceType: '3', stopId: 'STOP1' },
+    ]);
   });
 });

@@ -1,10 +1,9 @@
 'use client';
 import { useState, useMemo } from 'react';
-import { Bus, Navigation, Heart, RotateCw } from 'lucide-react';
+import { Bus, Navigation, RotateCw } from 'lucide-react';
 import { getDistance } from 'geolib';
 import { APP_CONFIG } from '@/config';
 import { useLang } from '@/contexts/LanguageContext';
-import { useBookmarks } from '@/contexts/BookmarkContext';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useNearbyStops } from '@/hooks/useNearbyStops';
 import { useStopETAs } from '@/hooks/useStopETAs';
@@ -14,7 +13,6 @@ import { getDestinationCandidates, getDestinationPoint } from '@/lib/destination
 import { getStopIds } from '@/lib/stopGroups';
 import { FilterBar } from '@/components/FilterBar';
 import { StopCard } from '@/components/StopCard';
-import { FavoriteSidebar } from '@/components/FavoriteSidebar';
 import { LocationPrompt } from '@/components/LocationPrompt';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -34,10 +32,6 @@ function BusCheckerApp() {
   const [destination, setDestination] = useState<DestinationSelection | null>(null);
   const [destRadius, setDestRadius] = useState<number>(APP_CONFIG.DESTINATION_DEFAULT_RADIUS_M);
   const [showDestModal, setShowDestModal] = useState(false);
-
-  const [favouritesOnly, setFavouritesOnly] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { favoriteRoutes } = useBookmarks();
 
   const addFilter = (route: string) => {
     const r = route.trim().toUpperCase();
@@ -146,7 +140,7 @@ function BusCheckerApp() {
   }, [lat, lon, destinationPoint]);
 
   const filteredStopCount = useMemo(() => {
-    if (routeFilters.length === 0 && !favouritesOnly) return visibleStops.length;
+    if (routeFilters.length === 0) return visibleStops.length;
     return visibleStops.filter((s) => {
       const matches = destinationActive ? groupedMatchesByOriginStop[s.stop] ?? [] : undefined;
       const etas = filterEligibleETAs(groupedEtasMap[s.stop] ?? [], matches);
@@ -155,11 +149,10 @@ function BusCheckerApp() {
         ...(matches ?? []).map((match) => match.route.toUpperCase()),
       ]);
       return [...routes].some((route) =>
-        (routeFilters.length === 0 || routeFilters.some((filter) => route.includes(filter)))
-        && (!favouritesOnly || favoriteRoutes.has(route)),
+        routeFilters.length === 0 || routeFilters.some((filter) => route.includes(filter)),
       );
     }).length;
-  }, [destinationActive, visibleStops, groupedEtasMap, groupedMatchesByOriginStop, routeFilters, favouritesOnly, favoriteRoutes]);
+  }, [destinationActive, visibleStops, groupedEtasMap, groupedMatchesByOriginStop, routeFilters]);
 
   return (
     <div className="min-h-screen">
@@ -184,13 +177,6 @@ function BusCheckerApp() {
             <div className="flex items-center gap-2 flex-shrink-0">
               <LanguageToggle />
               <ThemeToggle />
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/15 text-white hover:bg-white/25 transition-colors"
-                aria-label={lang === 'en' ? 'My Favourites' : '我的最愛'}
-              >
-                <Heart className="h-4 w-4" />
-              </button>
             </div>
           </div>
           {hasCoords && !geoError && (
@@ -229,8 +215,6 @@ function BusCheckerApp() {
           onClearDestination={() => {
             setDestination(null);
           }}
-          favouritesOnly={favouritesOnly}
-          onToggleFavouritesOnly={() => setFavouritesOnly((value) => !value)}
         />
       )}
 
@@ -279,22 +263,10 @@ function BusCheckerApp() {
                 : `附近 ${stops.length} 個巴士站均沒有前往目的地的路線。`}
             </p>
           </div>
-        ) : favouritesOnly && filteredStopCount === 0 && !(etaLoading && lastRefreshed === null) ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-32 text-center">
-            <p className="text-xl font-semibold">
-              {favoriteRoutes.size === 0
-                ? lang === 'en' ? 'No favourite routes saved.' : '尚未收藏任何路線。'
-                : lang === 'en' ? 'No favourite routes match the current filters.' : '沒有收藏路線符合目前的篩選條件。'}
-            </p>
-          </div>
         ) : (
           <>
             <p className="mb-4 text-xs text-[var(--muted)]">
-              {favouritesOnly
-                ? lang === 'en'
-                  ? `${filteredStopCount} of ${stops.length} nearby stops match active filters`
-                  : `${stops.length} 個附近巴士站中有 ${filteredStopCount} 個符合篩選條件`
-                : destinationActive
+              {destinationActive
                 ? lang === 'en'
                   ? `${visibleStops.length} of ${stops.length} stops have routes to destination${routeFilters.length > 0 ? ` · ${filteredStopCount} match filters` : ''}`
                   : `${stops.length} 個巴士站中有 ${visibleStops.length} 個有前往目的地的路線${routeFilters.length > 0 ? ` · ${filteredStopCount} 個符合篩選` : ''}`
@@ -318,8 +290,6 @@ function BusCheckerApp() {
                   destinationMatches={destinationActive ? groupedMatchesByOriginStop[stop.stop] ?? [] : undefined}
                   destinationStopNames={destinationStopNames}
                   destinationStops={destinationStopsById}
-                  favouriteRoutes={favoriteRoutes}
-                  favouritesOnly={favouritesOnly}
                   etaStates={etaStates}
                 />
               ))}
@@ -338,9 +308,6 @@ function BusCheckerApp() {
           onRefresh={refresh}
         />
       )}
-
-      {/* ── Favourite Sidebar ── */}
-      <FavoriteSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* ── Destination Modal ── */}
       <DestinationModal

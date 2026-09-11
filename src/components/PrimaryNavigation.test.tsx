@@ -13,7 +13,7 @@ vi.mock('next/link', () => ({
 afterEach(() => cleanup());
 
 describe('PrimaryNavigation', () => {
-  it('marks Nearby active on the home page and Routes active throughout route detail', () => {
+  it('marks Nearby active on the home page, Routes throughout detail, and Favourites on its page', () => {
     const { rerender } = render(<LanguageProvider><PrimaryNavigation /></LanguageProvider>);
     const nearbyLinks = screen.getAllByRole('link', { name: '附近' });
     expect(nearbyLinks).toHaveLength(2);
@@ -27,5 +27,11 @@ describe('PrimaryNavigation', () => {
     expect(routeLinks).toHaveLength(2);
     expect(routeLinks.every((link) => link.getAttribute('aria-current') === 'page')).toBe(true);
     expect(screen.getAllByRole('link', { name: '附近' }).every((link) => link.getAttribute('aria-current') === null)).toBe(true);
+
+    pathname = '/favourites';
+    rerender(<LanguageProvider><PrimaryNavigation /></LanguageProvider>);
+    const favouriteLinks = screen.getAllByRole('link', { name: '收藏' });
+    expect(favouriteLinks).toHaveLength(2);
+    expect(favouriteLinks.every((link) => link.getAttribute('aria-current') === 'page')).toBe(true);
   });
 });
