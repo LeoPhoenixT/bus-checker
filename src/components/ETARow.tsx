@@ -7,6 +7,7 @@ import { useBookmarks } from '@/contexts/BookmarkContext';
 import type { DestinationStopNames, ETAEntry, Stop } from '@/lib/types';
 import type { ETAFreshness } from '@/lib/etaFreshness';
 import { getETAAgeSeconds } from '@/lib/etaFreshness';
+import { getMinutesUntil } from '@/lib/etaTime';
 
 interface ETARowProps {
   route: string;
@@ -20,9 +21,7 @@ interface ETARowProps {
   etaLoading?: boolean;
 }
 
-export function getMinutesUntil(etaIso: string): number {
-  return Math.floor((new Date(etaIso).getTime() - Date.now()) / 60_000);
-}
+export { getMinutesUntil } from '@/lib/etaTime';
 
 // Deterministic colour per route number — readable in both light & dark
 const ROUTE_COLOURS = [

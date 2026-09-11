@@ -3,9 +3,8 @@ import { useState, useMemo } from 'react';
 import { Bus, Navigation, Heart, RotateCw } from 'lucide-react';
 import { getDistance } from 'geolib';
 import { APP_CONFIG } from '@/config';
-import { LanguageProvider, useLang } from '@/contexts/LanguageContext';
-import { ThemeProvider } from '@/contexts/ThemeContext';
-import { BookmarkProvider, useBookmarks } from '@/contexts/BookmarkContext';
+import { useLang } from '@/contexts/LanguageContext';
+import { useBookmarks } from '@/contexts/BookmarkContext';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useNearbyStops } from '@/hooks/useNearbyStops';
 import { useStopETAs } from '@/hooks/useStopETAs';
@@ -23,6 +22,7 @@ import { RefreshIndicator } from '@/components/RefreshIndicator';
 import { StopCardSkeleton } from '@/components/LoadingSkeleton';
 import { RadiusSelector } from '@/components/RadiusSelector';
 import { DestinationModal } from '@/components/DestinationModal';
+import { PrimaryNavigation } from '@/components/PrimaryNavigation';
 import type { DestinationSelection, Stop } from '@/lib/types';
 
 function BusCheckerApp() {
@@ -211,6 +211,7 @@ function BusCheckerApp() {
               </button>
             </div>
           )}
+          <PrimaryNavigation />
         </div>
       </header>
 
@@ -234,7 +235,7 @@ function BusCheckerApp() {
       )}
 
       {/* ── Main Content ── */}
-      <main className="mx-auto max-w-2xl px-4 py-6">
+      <main className="mx-auto max-w-2xl px-4 py-6 pb-24 sm:pb-6">
         {showPrompt ? (
           <LocationPrompt loading={geoLoading} error={geoError} supported={supported} />
         ) : stopsLoading ? (
@@ -360,13 +361,5 @@ function BusCheckerApp() {
 }
 
 export default function Home() {
-  return (
-    <ThemeProvider>
-      <LanguageProvider>
-        <BookmarkProvider>
-          <BusCheckerApp />
-        </BookmarkProvider>
-      </LanguageProvider>
-    </ThemeProvider>
-  );
+  return <BusCheckerApp />;
 }

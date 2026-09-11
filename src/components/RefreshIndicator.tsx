@@ -61,7 +61,7 @@ export function RefreshIndicator({
     <button
       onClick={handleRefresh}
       disabled={loading}
-      className="fixed bottom-4 right-4 flex items-center gap-2 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3.5 py-2 text-xs shadow-2xl backdrop-blur-md transition-opacity disabled:opacity-60 disabled:cursor-not-allowed hover:border-blue-500/50 hover:bg-blue-500/5"
+      className="fixed bottom-20 right-4 z-30 flex items-center gap-2 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3.5 py-2 text-xs shadow-2xl backdrop-blur-md transition-opacity disabled:opacity-60 disabled:cursor-not-allowed hover:border-blue-500/50 hover:bg-blue-500/5 sm:bottom-4"
       aria-label={lang === 'en' ? 'Refresh bus data' : '刷新巴士資料'}
     >
       <RefreshCw

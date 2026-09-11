@@ -55,6 +55,36 @@ export interface RouteStop {
   data_timestamp: string;
 }
 
+/** A KMB route variant is only unique together with its direction and service type. */
+export interface RouteVariantId {
+  route: string;
+  bound: 'I' | 'O';
+  serviceType: string;
+}
+
+export interface RouteVariant extends RouteVariantId {
+  originEn: string;
+  originTc: string;
+  destinationEn: string;
+  destinationTc: string;
+  isSpecial: boolean;
+}
+
+export interface RouteDetailStop {
+  stopId: string;
+  seq: number;
+  nameEn: string;
+  nameTc: string;
+  lat: number;
+  long: number;
+}
+
+export interface RouteDetail {
+  variant: RouteVariant;
+  stops: RouteDetailStop[];
+  reverseVariants: RouteVariant[];
+}
+
 export interface DirectRouteMatch {
   route: string;
   bound: 'I' | 'O';
