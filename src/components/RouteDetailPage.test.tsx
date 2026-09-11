@@ -116,4 +116,35 @@ describe('RouteDetailPage', () => {
     expect(screen.getByText('紅磡站 → 馬鞍山市中心')).toBeDefined();
     expect(screen.getByText('紅磡站 → 錦英苑')).toBeDefined();
   });
+
+  it('retries a temporarily unavailable topology response and preserves the search query in links', async () => {
+    fetchRouteDetailMock
+      .mockRejectedValueOnce(new Error('Failed to fetch route detail: 503'))
+      .mockResolvedValueOnce(detail());
+    render(
+      <ThemeProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" searchQuery="87" /></LanguageProvider></ThemeProvider>,
+    );
+    await waitFor(() => expect(screen.getByText('暫時無法載入路線資料')).toBeDefined());
+    expect(screen.getByRole('link', { name: '返回路線搜尋' }).getAttribute('href')).toBe('/routes?q=87');
+    fireEvent.click(screen.getByRole('button', { name: '重試' }));
+    await waitFor(() => expect(screen.getByText('第一站')).toBeDefined());
+    expect(fetchRouteDetailMock).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('link', { name: '查看反方向' }).getAttribute('href')).toContain('&q=87');
+  });
+
+  it('distinguishes an empty ETA response from an unavailable ETA service for a selected stop', async () => {
+    fetchRouteDetailMock.mockResolvedValue(detail());
+    fetchStopETAsMock
+      .mockResolvedValueOnce(response([]))
+      .mockRejectedValueOnce(new Error('KMB ETA unavailable'));
+    renderPage();
+    await waitFor(() => expect(screen.getByText('第一站')).toBeDefined());
+
+    fireEvent.click(screen.getByRole('button', { name: /第一站/ }));
+    await waitFor(() => expect(screen.getByText('暫無班次資料')).toBeDefined());
+
+    fireEvent.click(screen.getByRole('button', { name: /第二站/ }));
+    await waitFor(() => expect(screen.getByText('暫未能提供即時到站時間')).toBeDefined());
+    expect(screen.getByText('暫未能提供到站時間')).toBeDefined();
+  });
 });

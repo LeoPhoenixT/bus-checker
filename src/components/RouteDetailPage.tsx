@@ -20,11 +20,17 @@ interface RouteDetailPageProps {
   route: string;
   bound: 'I' | 'O';
   serviceType: string;
+  searchQuery?: string;
 }
 
-function routeDetailHref(variant: RouteVariant): string {
+function routeDetailHref(variant: RouteVariant, searchQuery?: string): string {
   const params = new URLSearchParams({ bound: variant.bound, serviceType: variant.serviceType });
+  if (searchQuery) params.set('q', searchQuery);
   return `/routes/${encodeURIComponent(variant.route)}?${params}`;
+}
+
+function routeSearchHref(searchQuery?: string): string {
+  return searchQuery ? `/routes?q=${encodeURIComponent(searchQuery)}` : '/routes';
 }
 
 function names(variant: RouteVariant, lang: 'en' | 'tc'): { origin: string; destination: string } {
@@ -116,11 +122,12 @@ function SelectedStopETA({
   );
 }
 
-export function RouteDetailPage({ route, bound, serviceType }: RouteDetailPageProps) {
+export function RouteDetailPage({ route, bound, serviceType, searchQuery }: RouteDetailPageProps) {
   const { lang } = useLang();
   const [detail, setDetail] = useState<RouteDetail | null>(null);
   const [error, setError] = useState<'not-found' | 'unavailable' | null>(null);
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -137,7 +144,7 @@ export function RouteDetailPage({ route, bound, serviceType }: RouteDetailPagePr
         setError(message.includes(': 404') ? 'not-found' : 'unavailable');
       });
     return () => controller.abort();
-  }, [bound, route, serviceType]);
+  }, [bound, retryCount, route, serviceType]);
 
   const selectedStop = useMemo(
     () => detail?.stops.find((stop) => stop.stopId === selectedStopId) ?? null,
@@ -153,7 +160,7 @@ export function RouteDetailPage({ route, bound, serviceType }: RouteDetailPagePr
       <header className="border-b border-white/10 bg-gradient-to-r from-blue-700 via-blue-600 to-blue-700 shadow-xl">
         <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-4">
           <div className="flex items-center justify-between gap-4">
-            <Link href="/routes" className="flex min-w-0 items-center gap-2.5 text-white transition-opacity hover:opacity-85">
+            <Link href={routeSearchHref(searchQuery)} className="flex min-w-0 items-center gap-2.5 text-white transition-opacity hover:opacity-85">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15"><ArrowLeft className="h-5 w-5" /></span>
               <span>
                 <span className="block text-lg font-bold leading-none tracking-tight">{route}</span>
@@ -182,7 +189,8 @@ export function RouteDetailPage({ route, bound, serviceType }: RouteDetailPagePr
                 ? (lang === 'en' ? 'Route variant not found' : '找不到此路線班次')
                 : (lang === 'en' ? 'Route data is temporarily unavailable' : '暫時無法載入路線資料')}
             </p>
-            <Link href="/routes" className="text-sm font-semibold text-blue-600 hover:underline dark:text-blue-400">{lang === 'en' ? 'Back to route search' : '返回路線搜尋'}</Link>
+            {error === 'unavailable' && <button type="button" onClick={() => setRetryCount((count) => count + 1)} className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-500/15 dark:text-blue-300">{lang === 'en' ? 'Retry' : '重試'}</button>}
+            <Link href={routeSearchHref(searchQuery)} className="text-sm font-semibold text-blue-600 hover:underline dark:text-blue-400">{lang === 'en' ? 'Back to route search' : '返回路線搜尋'}</Link>
           </div>
         )}
         {detail && (
@@ -194,7 +202,7 @@ export function RouteDetailPage({ route, bound, serviceType }: RouteDetailPagePr
               </div>
               <p className="mt-2 text-base font-semibold text-[var(--foreground)]">{names(detail.variant, lang).origin} <span className="px-1 text-[var(--muted)]">→</span> {names(detail.variant, lang).destination}</p>
               {detail.reverseVariants.length === 1 ? (
-                <Link href={routeDetailHref(detail.reverseVariants[0])} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-500/15 dark:text-blue-300">
+                <Link href={routeDetailHref(detail.reverseVariants[0], searchQuery)} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-500/15 dark:text-blue-300">
                   <RefreshCw className="h-4 w-4" />{lang === 'en' ? 'View reverse direction' : '查看反方向'}
                 </Link>
               ) : detail.reverseVariants.length > 1 ? (
@@ -204,7 +212,7 @@ export function RouteDetailPage({ route, bound, serviceType }: RouteDetailPagePr
                   </summary>
                   <div className="mt-2 overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--popover-bg)]">
                     {detail.reverseVariants.map((variant) => (
-                      <Link key={`${variant.route}|${variant.bound}|${variant.serviceType}`} href={routeDetailHref(variant)} className="block border-b border-[var(--divider)] px-3 py-3 text-sm last:border-b-0 hover:bg-blue-500/5">
+                      <Link key={`${variant.route}|${variant.bound}|${variant.serviceType}`} href={routeDetailHref(variant, searchQuery)} className="block border-b border-[var(--divider)] px-3 py-3 text-sm last:border-b-0 hover:bg-blue-500/5">
                         <span className="font-semibold text-[var(--foreground)]">{names(variant, lang).origin} → {names(variant, lang).destination}</span>
                         {variant.isSpecial && <span className="ml-2 text-xs text-amber-700 dark:text-amber-300">{lang === 'en' ? 'Special' : '特別班'}</span>}
                       </Link>
@@ -226,14 +234,14 @@ export function RouteDetailPage({ route, bound, serviceType }: RouteDetailPagePr
                         type="button"
                         onClick={() => setSelectedStopId((current) => current === stop.stopId ? null : stop.stopId)}
                         aria-expanded={selected}
-                        className={clsx('flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-blue-500/5 focus:bg-blue-500/5 focus:outline-none', selected && 'bg-blue-500/5')}
+                        className={clsx('flex w-full items-start gap-3 border-l-4 border-transparent px-4 py-3.5 text-left transition hover:bg-blue-500/5 focus:bg-blue-500/5 focus:outline-none', selected && 'border-blue-500 bg-blue-500/10')}
                       >
                         <span className={clsx('w-8 shrink-0 text-sm font-bold tabular-nums', selected ? 'text-blue-600 dark:text-blue-400' : 'text-[var(--muted)]')}>{String(stop.seq).padStart(2, '0')}</span>
-                        <span className="min-w-0 flex-1 text-sm font-semibold text-[var(--foreground)]">{stopName(stop, lang)}</span>
+                        <span className="min-w-0 flex-1 break-words text-sm font-semibold leading-5 text-[var(--foreground)]">{stopName(stop, lang)}</span>
                         {selected ? <ChevronUp className="h-4 w-4 text-blue-600 dark:text-blue-400" /> : <ChevronDown className="h-4 w-4 text-[var(--muted)]" />}
                       </button>
                       {selected && (
-                        <div className="px-4 pb-4 pl-[4.75rem]">
+                        <div className="px-4 pb-4 sm:pl-[4.75rem]">
                           <SelectedStopETA
                             detail={detail}
                             stop={stop}

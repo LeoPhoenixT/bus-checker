@@ -14,6 +14,7 @@ export default async function RoutePage({
   const route = normalizeRouteQuery(rawRoute);
   const bound = typeof query.bound === 'string' ? query.bound.trim().toUpperCase() : '';
   const serviceType = typeof query.serviceType === 'string' ? query.serviceType.trim().toUpperCase() : '';
+  const searchQuery = typeof query.q === 'string' ? normalizeRouteQuery(query.q) : '';
   if (!isValidRouteQuery(route) || (bound !== 'I' && bound !== 'O') || !isValidServiceType(serviceType)) notFound();
-  return <RouteDetailPage route={route} bound={bound} serviceType={serviceType} />;
+  return <RouteDetailPage route={route} bound={bound} serviceType={serviceType} searchQuery={isValidRouteQuery(searchQuery) ? searchQuery : undefined} />;
 }

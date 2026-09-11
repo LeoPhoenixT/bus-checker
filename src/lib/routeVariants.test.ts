@@ -26,11 +26,17 @@ describe('route variant helpers', () => {
     expect(sorted.map((item) => `${item.route}:${item.serviceType}`)).toEqual(['87D:1', '87D:3', '87:1']);
   });
 
-  it('only offers real opposite-bound variants starting at the current destination', () => {
+  it('only offers opposite-bound variants with an exact terminus swap', () => {
     const current = variant({ bound: 'O' });
     const reverse = variant({ bound: 'I', originTc: '紅磡站', destinationTc: '錦英苑' });
     const alternate = variant({ bound: 'I', serviceType: '3', isSpecial: true, originTc: '紅磡站', destinationTc: '馬鞍山市中心' });
     const wrong = variant({ bound: 'I', originTc: '尖沙咀', destinationTc: '錦英苑' });
-    expect(findReverseVariants(current, [current, alternate, wrong, reverse])).toEqual([reverse, alternate]);
+    expect(findReverseVariants(current, [current, alternate, wrong, reverse])).toEqual([reverse]);
+  });
+
+  it('does not call a shortened special service the reverse of a full route', () => {
+    const special = variant({ serviceType: '3', isSpecial: true, originTc: '馬鞍山市中心', destinationTc: '紅磡站' });
+    const normalReturn = variant({ bound: 'I', originTc: '紅磡站', destinationTc: '錦英苑' });
+    expect(findReverseVariants(special, [special, normalReturn])).toEqual([]);
   });
 });

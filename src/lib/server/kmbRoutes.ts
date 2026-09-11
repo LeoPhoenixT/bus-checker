@@ -1,27 +1,33 @@
 import { fetchKmbRouteStops, KmbRouteStopsError } from './kmbRouteStops';
 import { KMB_API_BASE } from './kmb';
+import { getKmbServiceDay } from './kmbServiceDay';
 import { findReverseVariants, isSpecialService, normalizeRouteQuery, routeVariantKey, sortRouteVariants } from '@/lib/routeVariants';
 import type { RouteDetail, RouteDetailStop, RouteVariant, Stop } from '@/lib/types';
 
 const ROUTES_URL = `${KMB_API_BASE}/route/`;
 const STOPS_URL = `${KMB_API_BASE}/stop`;
-const CACHE_TTL_MS = 24 * 60 * 60 * 1_000;
 const REFRESH_FAILURE_BACKOFF_MS = 60_000;
 
 interface CachedValue<T> {
   value: T;
-  fetchedAt: number;
+  serviceDay: string;
 }
 
 interface FailedRefresh {
+  serviceDay: string;
   retryAfter: number;
   error: KmbRoutesError;
 }
 
+interface PendingValue<T> {
+  serviceDay: string;
+  promise: Promise<T>;
+}
+
 let routesSnapshot: CachedValue<RouteVariant[]> | null = null;
 let stopsSnapshot: CachedValue<Stop[]> | null = null;
-let pendingRoutes: Promise<RouteVariant[]> | null = null;
-let pendingStops: Promise<Stop[]> | null = null;
+let pendingRoutes: PendingValue<RouteVariant[]> | null = null;
+let pendingStops: PendingValue<Stop[]> | null = null;
 let failedRoutes: FailedRefresh | null = null;
 let failedStops: FailedRefresh | null = null;
 
@@ -99,45 +105,60 @@ async function loadKmbCollection<T>(url: string, normalizer: (value: unknown) =>
   return normalized;
 }
 
-function isFresh<T>(snapshot: CachedValue<T> | null, now: number): snapshot is CachedValue<T> {
-  return snapshot !== null && now - snapshot.fetchedAt < CACHE_TTL_MS;
+function isFresh<T>(snapshot: CachedValue<T> | null, serviceDay: string): snapshot is CachedValue<T> {
+  return snapshot !== null && snapshot.serviceDay === serviceDay;
 }
 
 function fetchCached<T>(
   now: number,
+  serviceDay: string,
   snapshot: CachedValue<T> | null,
-  pending: Promise<T> | null,
+  pending: PendingValue<T> | null,
   failed: FailedRefresh | null,
   load: () => Promise<T>,
   commit: (value: CachedValue<T>) => void,
-  setPending: (value: Promise<T> | null) => void,
+  getPending: () => PendingValue<T> | null,
+  setPending: (value: PendingValue<T> | null) => void,
   setFailed: (value: FailedRefresh | null) => void,
 ): Promise<T> {
-  if (isFresh(snapshot, now)) return Promise.resolve(snapshot.value);
-  if (failed && now < failed.retryAfter) return Promise.reject(failed.error);
-  if (pending) return pending;
-  const refresh = load()
+  if (isFresh(snapshot, serviceDay)) return Promise.resolve(snapshot.value);
+  if (failed && failed.serviceDay === serviceDay && now < failed.retryAfter) return Promise.reject(failed.error);
+  if (pending?.serviceDay === serviceDay) return pending.promise;
+  const refresh: PendingValue<T> = { serviceDay, promise: Promise.resolve(undefined as T) };
+  refresh.promise = load()
     .then((value) => {
-      commit({ value, fetchedAt: now });
-      setFailed(null);
+      // A request that began before the daily boundary must not overwrite the
+      // current service-day snapshot after it eventually resolves.
+      const activePending = getPending();
+      if (activePending?.serviceDay === serviceDay && activePending.promise === refresh.promise) {
+        commit({ value, serviceDay });
+        setFailed(null);
+      }
       return value;
     })
     .catch((error: unknown) => {
       const routeError = error instanceof KmbRoutesError
         ? error
         : new KmbRoutesError('Unable to refresh KMB route data', { cause: error });
-      setFailed({ retryAfter: now + REFRESH_FAILURE_BACKOFF_MS, error: routeError });
+      const activePending = getPending();
+      if (activePending?.serviceDay === serviceDay && activePending.promise === refresh.promise) {
+        setFailed({ serviceDay, retryAfter: now + REFRESH_FAILURE_BACKOFF_MS, error: routeError });
+      }
       throw routeError;
     })
-    .finally(() => setPending(null));
+    .finally(() => {
+      const activePending = getPending();
+      if (activePending?.serviceDay === serviceDay && activePending.promise === refresh.promise) setPending(null);
+    });
   setPending(refresh);
-  return refresh;
+  return refresh.promise;
 }
 
 export function fetchKmbRouteVariants(now = new Date()): Promise<RouteVariant[]> {
   const nowMs = now.getTime();
+  const serviceDay = getKmbServiceDay(now);
   return fetchCached(
-    nowMs, routesSnapshot, pendingRoutes, failedRoutes,
+    nowMs, serviceDay, routesSnapshot, pendingRoutes, failedRoutes,
     async () => {
       const variants = await loadKmbCollection(ROUTES_URL, normalizeRouteVariant, 'route');
       const unique = new Map<string, RouteVariant>();
@@ -145,6 +166,7 @@ export function fetchKmbRouteVariants(now = new Date()): Promise<RouteVariant[]>
       return sortRouteVariants([...unique.values()]);
     },
     (value) => { routesSnapshot = value; },
+    () => pendingRoutes,
     (value) => { pendingRoutes = value; },
     (value) => { failedRoutes = value; },
   );
@@ -152,10 +174,12 @@ export function fetchKmbRouteVariants(now = new Date()): Promise<RouteVariant[]>
 
 export function fetchKmbStops(now = new Date()): Promise<Stop[]> {
   const nowMs = now.getTime();
+  const serviceDay = getKmbServiceDay(now);
   return fetchCached(
-    nowMs, stopsSnapshot, pendingStops, failedStops,
+    nowMs, serviceDay, stopsSnapshot, pendingStops, failedStops,
     () => loadKmbCollection(STOPS_URL, normalizeStop, 'stop'),
     (value) => { stopsSnapshot = value; },
+    () => pendingStops,
     (value) => { pendingStops = value; },
     (value) => { failedStops = value; },
   );
@@ -174,10 +198,13 @@ export async function getKmbRouteDetail(
 ): Promise<RouteDetail | null> {
   const normalizedRoute = normalizeRouteQuery(route);
   const normalizedServiceType = serviceType.trim().toUpperCase();
+  // A single captured clock value keeps all three static collections on the
+  // same KMB service day even when a request straddles the 05:10 HKT boundary.
+  const snapshotNow = new Date();
   const [variants, routeStops, stops] = await Promise.all([
-    fetchKmbRouteVariants(),
-    fetchKmbRouteStops(),
-    fetchKmbStops(),
+    fetchKmbRouteVariants(snapshotNow),
+    fetchKmbRouteStops(snapshotNow),
+    fetchKmbStops(snapshotNow),
   ]);
   const variant = variants.find((item) => (
     item.route === normalizedRoute && item.bound === bound && item.serviceType === normalizedServiceType

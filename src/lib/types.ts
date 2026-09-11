@@ -85,6 +85,11 @@ export interface RouteDetail {
   reverseVariants: RouteVariant[];
 }
 
+export interface RouteSearchResult {
+  routes: RouteVariant[];
+  truncated: boolean;
+}
+
 export interface DirectRouteMatch {
   route: string;
   bound: 'I' | 'O';

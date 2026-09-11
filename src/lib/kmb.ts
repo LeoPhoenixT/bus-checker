@@ -1,4 +1,4 @@
-import type { RouteDetail, RouteVariant, StopListResponse, StopETAResponse } from './types';
+import type { RouteDetail, RouteSearchResult, StopListResponse, StopETAResponse } from './types';
 
 export async function fetchAllStops(): Promise<StopListResponse> {
   const res = await fetch('/api/stops');
@@ -19,11 +19,11 @@ export async function fetchStopETAs(
   return res.json() as Promise<StopETAResponse>;
 }
 
-export async function searchRoutes(query: string, { signal }: FetchStopETAOptions = {}): Promise<RouteVariant[]> {
+export async function searchRoutes(query: string, { signal }: FetchStopETAOptions = {}): Promise<RouteSearchResult> {
   const res = await fetch(`/api/routes?q=${encodeURIComponent(query)}`, { signal });
   if (!res.ok) throw new Error(`Failed to search routes: ${res.status}`);
-  const body = await res.json() as { routes?: RouteVariant[] };
-  return body.routes ?? [];
+  const body = await res.json() as Partial<RouteSearchResult>;
+  return { routes: body.routes ?? [], truncated: body.truncated === true };
 }
 
 export async function fetchRouteDetail(

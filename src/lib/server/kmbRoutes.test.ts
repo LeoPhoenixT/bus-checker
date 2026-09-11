@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getKmbRouteDetail, resetKmbRoutesCacheForTests, searchKmbRouteVariants } from './kmbRoutes';
+import {
+  fetchKmbRouteVariants,
+  getKmbRouteDetail,
+  resetKmbRoutesCacheForTests,
+  searchKmbRouteVariants,
+} from './kmbRoutes';
 import { resetKmbRouteStopsCacheForTests } from './kmbRouteStops';
 
 function response(data: unknown[]): Response {
@@ -71,5 +76,47 @@ describe('searchKmbRouteVariants', () => {
 
     const routes = await searchKmbRouteVariants('87d');
     expect(routes.map((item) => item.route)).toEqual(['87D', '87D1']);
+  });
+});
+
+describe('KMB route metadata service-day cache', () => {
+  it('replaces metadata at the same 05:10 HKT service-day boundary as route stops', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(response([
+        { route: '1', bound: 'O', service_type: '1', orig_en: 'Old origin', orig_tc: '舊起點', dest_en: 'Old destination', dest_tc: '舊終點' },
+      ]))
+      .mockResolvedValueOnce(response([
+        { route: '2', bound: 'O', service_type: '1', orig_en: 'New origin', orig_tc: '新起點', dest_en: 'New destination', dest_tc: '新終點' },
+      ]));
+
+    const previous = await fetchKmbRouteVariants(new Date('2026-08-04T21:09:00.000Z'));
+    const current = await fetchKmbRouteVariants(new Date('2026-08-04T21:10:00.000Z'));
+
+    expect(previous.map((item) => item.route)).toEqual(['1']);
+    expect(current.map((item) => item.route)).toEqual(['2']);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not allow an old service-day request to overwrite a newer snapshot', async () => {
+    let resolveOld!: (value: Response) => void;
+    let resolveNew!: (value: Response) => void;
+    const oldFetch = new Promise<Response>((resolve) => { resolveOld = resolve; });
+    const newFetch = new Promise<Response>((resolve) => { resolveNew = resolve; });
+    vi.spyOn(globalThis, 'fetch')
+      .mockReturnValueOnce(oldFetch)
+      .mockReturnValueOnce(newFetch);
+
+    const oldRequest = fetchKmbRouteVariants(new Date('2026-08-04T21:09:00.000Z'));
+    const newRequest = fetchKmbRouteVariants(new Date('2026-08-04T21:10:00.000Z'));
+    resolveOld(response([
+      { route: '1', bound: 'O', service_type: '1', orig_en: 'Old', orig_tc: '舊', dest_en: 'Old destination', dest_tc: '舊終點' },
+    ]));
+    resolveNew(response([
+      { route: '2', bound: 'O', service_type: '1', orig_en: 'New', orig_tc: '新', dest_en: 'New destination', dest_tc: '新終點' },
+    ]));
+    await Promise.all([oldRequest, newRequest]);
+
+    const afterBoundary = await fetchKmbRouteVariants(new Date('2026-08-04T22:00:00.000Z'));
+    expect(afterBoundary.map((item) => item.route)).toEqual(['2']);
   });
 });

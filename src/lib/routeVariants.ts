@@ -59,23 +59,28 @@ function sameName(a: string, b: string): boolean {
   return Boolean(normalizedA) && Boolean(normalizedB) && normalizedA === normalizedB;
 }
 
+function hasExactTerminusSwap(current: RouteVariant, candidate: RouteVariant): boolean {
+  const chineseMatch = sameName(candidate.originTc, current.destinationTc)
+    && sameName(candidate.destinationTc, current.originTc);
+  const englishMatch = sameName(candidate.originEn, current.destinationEn)
+    && sameName(candidate.destinationEn, current.originEn);
+  return chineseMatch || englishMatch;
+}
+
 /**
- * Return only real opposite-bound variants which start at this variant's
- * destination.  Prefer an exact terminus swap and the same service type, but
- * retain other real variants so users can choose between special services.
+ * Return only real opposite-bound variants with the same two termini. A
+ * special service can start or finish part-way along a normal route; offering
+ * that normal route as its "reverse" would be misleading, so partial matches
+ * are intentionally excluded.
  */
 export function findReverseVariants(current: RouteVariant, allVariants: RouteVariant[]): RouteVariant[] {
   const candidates = allVariants.filter((candidate) => (
     candidate.route === current.route
     && candidate.bound !== current.bound
-    && (sameName(candidate.originTc, current.destinationTc)
-      || sameName(candidate.originEn, current.destinationEn))
+    && hasExactTerminusSwap(current, candidate)
   ));
 
   return [...candidates].sort((a, b) => {
-    const aExact = sameName(a.destinationTc, current.originTc) || sameName(a.destinationEn, current.originEn);
-    const bExact = sameName(b.destinationTc, current.originTc) || sameName(b.destinationEn, current.originEn);
-    if (aExact !== bExact) return aExact ? -1 : 1;
     const aSameService = a.serviceType === current.serviceType;
     const bSameService = b.serviceType === current.serviceType;
     if (aSameService !== bSameService) return aSameService ? -1 : 1;

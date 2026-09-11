@@ -11,8 +11,9 @@ import { LanguageToggle } from './LanguageToggle';
 import { PrimaryNavigation } from './PrimaryNavigation';
 import { ThemeToggle } from './ThemeToggle';
 
-function routeDetailHref(route: RouteVariant): string {
+function routeDetailHref(route: RouteVariant, searchQuery: string): string {
   const params = new URLSearchParams({ bound: route.bound, serviceType: route.serviceType });
+  if (searchQuery) params.set('q', searchQuery);
   return `/routes/${encodeURIComponent(route.route)}?${params}`;
 }
 
@@ -22,16 +23,19 @@ function variantName(variant: RouteVariant, lang: 'en' | 'tc'): { origin: string
     : { origin: variant.originTc || variant.originEn, destination: variant.destinationTc || variant.destinationEn };
 }
 
-export function RouteSearchPage() {
+export function RouteSearchPage({ initialQuery = '' }: { initialQuery?: string }) {
   const { lang } = useLang();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(() => normalizeRouteQuery(initialQuery));
   const [results, setResults] = useState<RouteVariant[]>([]);
+  const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     if (!query) {
       setResults([]);
+      setTruncated(false);
       setError(null);
       setLoading(false);
       return;
@@ -41,12 +45,16 @@ export function RouteSearchPage() {
       setLoading(true);
       setError(null);
       void searchRoutes(query, { signal: controller.signal })
-        .then((routes) => {
-          if (!controller.signal.aborted) setResults(routes);
+        .then((result) => {
+          if (!controller.signal.aborted) {
+            setResults(Array.isArray(result.routes) ? result.routes : []);
+            setTruncated(result.truncated);
+          }
         })
         .catch(() => {
           if (!controller.signal.aborted) {
             setResults([]);
+            setTruncated(false);
             setError(lang === 'en' ? 'Route search is temporarily unavailable.' : '暫時無法搜尋路線。');
           }
         })
@@ -58,9 +66,12 @@ export function RouteSearchPage() {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [lang, query]);
+  }, [lang, query, retryCount]);
 
-  const onChange = (value: string) => setQuery(normalizeRouteQuery(value));
+  const onChange = (value: string) => {
+    setQuery(normalizeRouteQuery(value));
+    setRetryCount(0);
+  };
 
   return (
     <div className="min-h-screen">
@@ -120,7 +131,7 @@ export function RouteSearchPage() {
           <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400"><Search className="h-6 w-6" /></div>
             <p className="max-w-xs text-sm text-[var(--muted)]">
-              {lang === 'en' ? 'Enter a route number such as 1, 87D, or A21.' : '輸入路線號碼，例如 1、87D 或 A21。'}
+              {lang === 'en' ? 'Enter a route number such as 1, 87D, or B1.' : '輸入路線號碼，例如 1、87D 或 B1。'}
             </p>
           </div>
         ) : loading ? (
@@ -128,7 +139,12 @@ export function RouteSearchPage() {
             {[0, 1, 2].map((index) => <div key={index} className="h-20 animate-pulse rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)]" />)}
           </div>
         ) : error ? (
-          <p className="py-16 text-center text-sm text-[var(--muted)]">{error}</p>
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <p className="text-sm text-[var(--muted)]">{error}</p>
+            <button type="button" onClick={() => setRetryCount((count) => count + 1)} className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-500/15 dark:text-blue-300">
+              {lang === 'en' ? 'Retry' : '重試'}
+            </button>
+          </div>
         ) : results.length === 0 ? (
           <p className="py-16 text-center text-sm text-[var(--muted)]">
             {lang === 'en' ? `No KMB routes found for “${query}”.` : `找不到「${query}」的九巴路線。`}
@@ -140,7 +156,7 @@ export function RouteSearchPage() {
               return (
                 <Link
                   key={`${route.route}|${route.bound}|${route.serviceType}`}
-                  href={routeDetailHref(route)}
+                  href={routeDetailHref(route, query)}
                   className="flex items-center gap-3 border-b border-[var(--divider)] px-4 py-4 transition last:border-b-0 hover:bg-blue-500/5 focus:bg-blue-500/5 focus:outline-none"
                 >
                   <span className="w-16 shrink-0 text-lg font-bold tabular-nums text-[var(--foreground)]">{route.route}</span>
@@ -156,6 +172,11 @@ export function RouteSearchPage() {
               );
             })}
           </div>
+        )}
+        {results.length > 0 && truncated && (
+          <p className="mt-3 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-800 dark:text-amber-200">
+            {lang === 'en' ? 'Showing the first 50 results. Enter more characters to narrow your search.' : '只顯示首 50 個結果，請輸入更多字元縮小搜尋範圍。'}
+          </p>
         )}
       </main>
     </div>

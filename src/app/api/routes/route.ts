@@ -12,8 +12,12 @@ export async function GET(request: Request) {
   }
 
   try {
-    const routes = await searchKmbRouteVariants(query, MAX_RESULTS);
-    return NextResponse.json({ routes }, {
+    // Load one additional item so the client can truthfully explain that the
+    // list is capped, rather than making a 50-item result look exhaustive.
+    const matchedRoutes = await searchKmbRouteVariants(query, MAX_RESULTS + 1);
+    const truncated = matchedRoutes.length > MAX_RESULTS;
+    const routes = matchedRoutes.slice(0, MAX_RESULTS);
+    return NextResponse.json({ routes, truncated }, {
       headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600' },
     });
   } catch (error) {
