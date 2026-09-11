@@ -6,6 +6,7 @@ import { useLang } from '@/contexts/LanguageContext';
 import { ETARow } from './ETARow';
 import { StopLocationModal } from './StopLocationModal';
 import { filterEligibleETAs } from '@/lib/etaEligibility';
+import { isSpecialService } from '@/lib/routeVariants';
 import type { ETAFreshness } from '@/lib/etaFreshness';
 import type { StopETAStateWithFreshness } from '@/hooks/useStopETAs';
 import { getStopIds } from '@/lib/stopGroups';
@@ -26,12 +27,20 @@ interface StopCardProps {
 
 interface RouteGroup {
   route: string;
+  bound: 'I' | 'O';
+  serviceType: string;
+  boardingStopId: string;
+  isSpecial: boolean;
   etas: ETAEntry[];
   alightingStopIds: string[];
 }
 
-function routeGroupKey(route: string, direction: string): string {
-  return `${route.trim().toUpperCase()}|${direction.trim().toUpperCase()}`;
+function normalize(value: unknown): string {
+  return String(value ?? '').trim().toUpperCase();
+}
+
+function routeGroupKey(route: string, bound: string, serviceType: string | number, boardingStopId: string): string {
+  return `${normalize(route)}|${normalize(bound)}|${normalize(serviceType)}|${normalize(boardingStopId)}`;
 }
 
 export function StopCard({
@@ -78,11 +87,21 @@ export function StopCard({
     && statesWithSuccessfulData.length === 0
     && !stopETALoading;
 
-  /* Group ETAs by route+direction (merging service types), keep up to 3 eta_seq per group */
+  /* Keep every route variant and exact boarding stop separate. A grouped nearby
+   * card can represent colocated KMB stop IDs, so route number alone is not a
+   * safe Route Detail identity. */
   const grouped = new Map<string, RouteGroup>();
   for (const match of destinationMatches ?? []) {
-    const key = routeGroupKey(match.route, match.bound);
-    const group = grouped.get(key) ?? { route: match.route, etas: [], alightingStopIds: [] };
+    const key = routeGroupKey(match.route, match.bound, match.serviceType, match.boardingStop);
+    const group = grouped.get(key) ?? {
+      route: normalize(match.route),
+      bound: match.bound,
+      serviceType: normalize(match.serviceType),
+      boardingStopId: normalize(match.boardingStop),
+      isSpecial: isSpecialService(normalize(match.serviceType)),
+      etas: [],
+      alightingStopIds: [],
+    };
     if (!group.alightingStopIds.includes(match.alightingStop)) {
       group.alightingStopIds.push(match.alightingStop);
     }
@@ -90,8 +109,18 @@ export function StopCard({
   }
   const eligibleEtas = filterEligibleETAs(etas, destinationMatches);
   for (const eta of eligibleEtas) {
-    const key = routeGroupKey(eta.route, eta.dir);
-    const group = grouped.get(key) ?? { route: eta.route, etas: [], alightingStopIds: [] };
+    const boardingStopId = normalize(eta.stop);
+    if (!boardingStopId) continue;
+    const key = routeGroupKey(eta.route, eta.dir, eta.service_type, boardingStopId);
+    const group = grouped.get(key) ?? {
+      route: normalize(eta.route),
+      bound: eta.dir,
+      serviceType: normalize(eta.service_type),
+      boardingStopId,
+      isSpecial: isSpecialService(normalize(eta.service_type)),
+      etas: [],
+      alightingStopIds: [],
+    };
     if (group.etas.length < 3) {
       group.etas.push(eta);
       grouped.set(key, group);
@@ -187,6 +216,10 @@ export function StopCard({
             <ETARow
               key={key}
               route={grouped.get(key)!.route}
+              bound={grouped.get(key)!.bound}
+              serviceType={grouped.get(key)!.serviceType}
+              boardingStopId={grouped.get(key)!.boardingStopId}
+              isSpecial={grouped.get(key)!.isSpecial}
               etas={grouped.get(key)!.etas}
               alightingStopIds={grouped.get(key)!.alightingStopIds}
               destinationStopNames={destinationStopNames}

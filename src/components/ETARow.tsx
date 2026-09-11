@@ -1,5 +1,6 @@
 'use client';
 import { Fragment } from 'react';
+import Link from 'next/link';
 import { MapPin } from 'lucide-react';
 import clsx from 'clsx';
 import { useLang } from '@/contexts/LanguageContext';
@@ -11,6 +12,10 @@ import { getMinutesUntil } from '@/lib/etaTime';
 
 interface ETARowProps {
   route: string;
+  bound: 'I' | 'O';
+  serviceType: string;
+  boardingStopId: string;
+  isSpecial?: boolean;
   etas: ETAEntry[];
   alightingStopIds?: string[];
   destinationStopNames?: DestinationStopNames;
@@ -43,6 +48,10 @@ function routeColour(route: string): string {
 
 export function ETARow({
   route,
+  bound,
+  serviceType,
+  boardingStopId,
+  isSpecial = false,
   etas,
   alightingStopIds = [],
   destinationStopNames = {},
@@ -58,6 +67,11 @@ export function ETARow({
   const first = etas[0];
   const dest = first ? (lang === 'en' ? first.dest_en : first.dest_tc) : '';
   const destPrefix = lang === 'en' ? 'To ' : '往 ';
+  const routeDetailParams = new URLSearchParams({ bound, serviceType, stop: boardingStopId });
+  const routeDetailHref = `/routes/${encodeURIComponent(route)}?${routeDetailParams}`;
+  const routeDetailLabel = lang === 'en'
+    ? `View ${route}${isSpecial ? ' special service' : ''} route details`
+    : `查看${route}${isSpecial ? '特別班' : ''}路線詳情`;
   const alightingStops = alightingStopIds.map((stopId) => ({
     id: stopId,
     name: destinationStopNames[stopId]?.[lang] ?? stopId,
@@ -167,14 +181,17 @@ export function ETARow({
     <div className="flex items-center gap-3 py-2.5">
       {/* Route badge */}
       <div className="flex items-center gap-1.5 shrink-0">
-        <span
+        <Link
+          href={routeDetailHref}
+          aria-label={routeDetailLabel}
+          title={routeDetailLabel}
           className={clsx(
-            'inline-block w-16 shrink-0 rounded-lg border px-1.5 py-0.5 text-center text-xs font-bold',
+            'inline-flex w-16 shrink-0 items-center justify-center rounded-lg border px-1.5 py-0.5 text-center text-xs font-bold transition hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-500/60',
             routeColour(route),
           )}
         >
           {route}
-        </span>
+        </Link>
       </div>
 
       {/* Destination with direction prefix */}
@@ -216,6 +233,11 @@ export function ETARow({
               : 'text-[var(--muted)]',
           )}>
             {freshnessNotice}
+          </p>
+        )}
+        {isSpecial && (
+          <p className="mt-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+            {lang === 'en' ? 'Special service' : '特別班'}
           </p>
         )}
         {/* Later arrival times shown as smaller text beneath */}

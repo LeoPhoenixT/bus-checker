@@ -26,6 +26,7 @@ describe('matchDirectRoutes', () => {
         route: '88X',
         bound: 'O',
         serviceType: '1',
+        boardingStop: 'ORIGIN01',
         boardingSeq: 5,
         alightingStop: 'DEST0001',
         alightingSeq: 18,
@@ -60,6 +61,7 @@ describe('matchDirectRoutes', () => {
       ['DEST0003', 'DEST0002', 'DEST0001'],
     );
     expect(result.ORIGIN01[0]).toMatchObject({
+      boardingStop: 'ORIGIN01',
       boardingSeq: 7,
       alightingStop: 'DEST0001',
       alightingSeq: 12,

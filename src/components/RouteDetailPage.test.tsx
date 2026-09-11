@@ -100,11 +100,44 @@ describe('RouteDetailPage', () => {
     expect(fetchStopETAsMock).toHaveBeenCalledTimes(2);
   });
 
+  it('accepts a topology-confirmed nearby stop deep link and fetches only that stop', async () => {
+    fetchRouteDetailMock.mockResolvedValue(detail());
+    fetchStopETAsMock.mockResolvedValue(response([eta({ stop: 'STOP2', seq: 2 })]));
+    render(
+      <ThemeProvider>
+        <LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="stop2" /></LanguageProvider>
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText('第二站')).toBeDefined());
+    await waitFor(() => expect(fetchStopETAsMock).toHaveBeenCalledWith('STOP2', expect.objectContaining({ signal: expect.anything() })));
+    expect(fetchStopETAsMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: /第二站/ }).getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('silently ignores a stale or invalid nearby stop deep link without preloading ETA', async () => {
+    fetchRouteDetailMock.mockResolvedValue(detail());
+    render(
+      <ThemeProvider>
+        <LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="NOT-ON-THIS-VARIANT" /></LanguageProvider>
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText('第一站')).toBeDefined());
+    expect(fetchStopETAsMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /第一站/ }).getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('shows a direct reverse link for one trustworthy candidate and a choice for several', async () => {
     fetchRouteDetailMock.mockResolvedValue(detail());
-    const { rerender } = renderPage();
+    fetchStopETAsMock.mockResolvedValue(response([]));
+    const { rerender } = render(
+      <ThemeProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="STOP1" /></LanguageProvider></ThemeProvider>,
+    );
     await waitFor(() => expect(screen.getByText('查看反方向')).toBeDefined());
-    expect(screen.getByRole('link', { name: '查看反方向' }).getAttribute('href')).toContain('bound=I&serviceType=3');
+    const reverseLink = screen.getByRole('link', { name: '查看反方向' });
+    expect(reverseLink.getAttribute('href')).toContain('bound=I&serviceType=3');
+    expect(reverseLink.getAttribute('href')).not.toContain('stop=STOP1');
 
     const alternate: RouteVariant = { ...reverseVariant, serviceType: '1', isSpecial: false, destinationTc: '錦英苑', destinationEn: 'Kam Ying Court' };
     fetchRouteDetailMock.mockResolvedValue(detail([reverseVariant, alternate]));

@@ -94,6 +94,8 @@ export interface DirectRouteMatch {
   route: string;
   bound: 'I' | 'O';
   serviceType: string;
+  /** Exact KMB boarding stop ID. This remains necessary when nearby stops are grouped. */
+  boardingStop: string;
   boardingSeq: number;
   alightingStop: string;
   alightingSeq: number;

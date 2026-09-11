@@ -26,7 +26,7 @@ function eta(overrides: Partial<ETAEntry> = {}): ETAEntry {
 }
 
 const match: DirectRouteMatch = {
-  route: '88X', bound: 'O', serviceType: '1', boardingSeq: 5,
+  route: '88X', bound: 'O', serviceType: '1', boardingStop: 'ORIGIN01', boardingSeq: 5,
   alightingStop: 'DEST0001', alightingSeq: 18,
 };
 
@@ -76,7 +76,7 @@ describe('StopCard destination eligibility', () => {
     expect(screen.getByText('88X')).toBeDefined();
   });
 
-  it('lists distinct alighting stops across merged service types', () => {
+  it('keeps special service variants separate and gives each exact variant a Route Detail link', () => {
     renderCard([], [
       match,
       { ...match, serviceType: '2', alightingStop: 'DEST0002', alightingSeq: 19 },
@@ -85,9 +85,29 @@ describe('StopCard destination eligibility', () => {
       DEST0001: { en: 'First Stop', tc: '第一站' },
       DEST0002: { en: 'Second Stop', tc: '第二站' },
     });
-    expect(screen.getByText('落車站：')).toBeDefined();
-    expect(screen.getByText('第一站')).toBeDefined();
+    expect(screen.getAllByText('落車站：')).toHaveLength(3);
+    expect(screen.getAllByText('第一站')).toHaveLength(2);
     expect(screen.getByText('第二站')).toBeDefined();
+    expect(screen.getAllByText('特別班')).toHaveLength(2);
+    expect(screen.getByRole('link', { name: '查看88X路線詳情' }).getAttribute('href'))
+      .toBe('/routes/88X?bound=O&serviceType=1&stop=ORIGIN01');
+    expect(screen.getAllByRole('link', { name: '查看88X特別班路線詳情' }).map((link) => link.getAttribute('href')))
+      .toEqual([
+        '/routes/88X?bound=O&serviceType=2&stop=ORIGIN01',
+        '/routes/88X?bound=O&serviceType=3&stop=ORIGIN01',
+      ]);
+  });
+
+  it('keeps colocated stop IDs separate in Route Detail links', () => {
+    renderCard([
+      eta({ stop: 'ORIGIN01', service_type: '1' }),
+      eta({ stop: 'ORIGIN02', service_type: '1', eta_seq: 2 }),
+    ], undefined);
+    const links = screen.getAllByRole('link', { name: '查看88X路線詳情' });
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '/routes/88X?bound=O&serviceType=1&stop=ORIGIN01',
+      '/routes/88X?bound=O&serviceType=1&stop=ORIGIN02',
+    ]);
   });
 
   it('opens the selected alighting stop on the map', () => {

@@ -21,6 +21,8 @@ interface RouteDetailPageProps {
   bound: 'I' | 'O';
   serviceType: string;
   searchQuery?: string;
+  /** A nearby-result deep link may preselect an exact boarding stop. */
+  initialStopId?: string;
 }
 
 function routeDetailHref(variant: RouteVariant, searchQuery?: string): string {
@@ -122,7 +124,7 @@ function SelectedStopETA({
   );
 }
 
-export function RouteDetailPage({ route, bound, serviceType, searchQuery }: RouteDetailPageProps) {
+export function RouteDetailPage({ route, bound, serviceType, searchQuery, initialStopId }: RouteDetailPageProps) {
   const { lang } = useLang();
   const [detail, setDetail] = useState<RouteDetail | null>(null);
   const [error, setError] = useState<'not-found' | 'unavailable' | null>(null);
@@ -136,7 +138,16 @@ export function RouteDetailPage({ route, bound, serviceType, searchQuery }: Rout
     setSelectedStopId(null);
     void fetchRouteDetail(route, bound, serviceType, { signal: controller.signal })
       .then((response) => {
-        if (!controller.signal.aborted) setDetail(response);
+        if (controller.signal.aborted) return;
+        setDetail(response);
+        const normalizedInitialStopId = initialStopId?.trim().toUpperCase();
+        // Ignore stale/hand-authored stop query values. ETA must only be
+        // fetched after the exact variant topology confirms membership.
+        setSelectedStopId(
+          normalizedInitialStopId && response.stops.some((stop) => stop.stopId.trim().toUpperCase() === normalizedInitialStopId)
+            ? normalizedInitialStopId
+            : null,
+        );
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
@@ -144,7 +155,7 @@ export function RouteDetailPage({ route, bound, serviceType, searchQuery }: Rout
         setError(message.includes(': 404') ? 'not-found' : 'unavailable');
       });
     return () => controller.abort();
-  }, [bound, retryCount, route, serviceType]);
+  }, [bound, initialStopId, retryCount, route, serviceType]);
 
   const selectedStop = useMemo(
     () => detail?.stops.find((stop) => stop.stopId === selectedStopId) ?? null,
