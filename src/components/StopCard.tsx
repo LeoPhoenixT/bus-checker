@@ -6,6 +6,10 @@ import { useLang } from '@/contexts/LanguageContext';
 import { ETARow } from './ETARow';
 import { StopLocationModal } from './StopLocationModal';
 import { filterEligibleETAs } from '@/lib/etaEligibility';
+import { isSpecialService } from '@/lib/routeVariants';
+import type { ETAFreshness } from '@/lib/etaFreshness';
+import type { StopETAStateWithFreshness } from '@/hooks/useStopETAs';
+import { getStopIds } from '@/lib/stopGroups';
 import type { DirectRouteMatch, DestinationStopNames, NearbyStop, ETAEntry, Stop } from '@/lib/types';
 
 interface StopCardProps {
@@ -16,18 +20,25 @@ interface StopCardProps {
   destinationMatches?: DirectRouteMatch[];
   destinationStopNames?: DestinationStopNames;
   destinationStops?: Record<string, Stop>;
-  favouriteRoutes?: Set<string>;
-  favouritesOnly?: boolean;
+  etaStates?: Record<string, StopETAStateWithFreshness>;
 }
 
 interface RouteGroup {
   route: string;
+  bound: 'I' | 'O';
+  serviceType: string;
+  boardingStopId: string;
+  isSpecial: boolean;
   etas: ETAEntry[];
   alightingStopIds: string[];
 }
 
-function routeGroupKey(route: string, direction: string): string {
-  return `${route.trim().toUpperCase()}|${direction.trim().toUpperCase()}`;
+function normalize(value: unknown): string {
+  return String(value ?? '').trim().toUpperCase();
+}
+
+function routeGroupKey(route: string, bound: string, serviceType: string | number, boardingStopId: string): string {
+  return `${normalize(route)}|${normalize(bound)}|${normalize(serviceType)}|${normalize(boardingStopId)}`;
 }
 
 export function StopCard({
@@ -38,18 +49,55 @@ export function StopCard({
   destinationMatches,
   destinationStopNames,
   destinationStops,
-  favouriteRoutes = new Set(),
-  favouritesOnly = false,
+  etaStates = {},
 }: StopCardProps) {
   const { lang } = useLang();
   const [mapStop, setMapStop] = useState<Stop | null>(null);
   const name = lang === 'en' ? stop.name_en : stop.name_tc;
+  const stopStates = getStopIds(stop)
+    .map((stopId) => etaStates[stopId.trim().toUpperCase()])
+    .filter((state): state is StopETAStateWithFreshness => Boolean(state));
 
-  /* Group ETAs by route+direction (merging service types), keep up to 3 eta_seq per group */
+  const freshnessPriority: Record<ETAFreshness, number> = {
+    fresh: 0,
+    'slightly-old': 1,
+    stale: 2,
+    'very-stale': 3,
+    unavailable: 4,
+  };
+  const statesWithSuccessfulData = stopStates.filter((state) => state.lastSuccessfulAt !== null);
+  const stopFreshness = statesWithSuccessfulData.length === 0
+    ? stopStates.length === 0 ? 'fresh' : 'unavailable'
+    : statesWithSuccessfulData.reduce<ETAFreshness>((leastFresh, state) => (
+      freshnessPriority[state.freshness] > freshnessPriority[leastFresh] ? state.freshness : leastFresh
+    ), 'fresh');
+  const stopLastSuccessfulAt = stopStates.reduce<Date | null>((oldest, state) => {
+    if (!state.lastSuccessfulAt) return oldest;
+    if (!oldest || state.lastSuccessfulAt < oldest) return state.lastSuccessfulAt;
+    return oldest;
+  }, null);
+  const stopETALoading = stopStates.some(
+    (state) => state.attemptStatus === 'loading' && state.lastSuccessfulAt === null,
+  );
+  const stopETAUnavailable = stopStates.length > 0
+    && statesWithSuccessfulData.length === 0
+    && !stopETALoading;
+
+  /* Keep every route variant and exact boarding stop separate. A grouped nearby
+   * card can represent colocated KMB stop IDs, so route number alone is not a
+   * safe Route Detail identity. */
   const grouped = new Map<string, RouteGroup>();
   for (const match of destinationMatches ?? []) {
-    const key = routeGroupKey(match.route, match.bound);
-    const group = grouped.get(key) ?? { route: match.route, etas: [], alightingStopIds: [] };
+    const key = routeGroupKey(match.route, match.bound, match.serviceType, match.boardingStop);
+    const group = grouped.get(key) ?? {
+      route: normalize(match.route),
+      bound: match.bound,
+      serviceType: normalize(match.serviceType),
+      boardingStopId: normalize(match.boardingStop),
+      isSpecial: isSpecialService(normalize(match.serviceType)),
+      etas: [],
+      alightingStopIds: [],
+    };
     if (!group.alightingStopIds.includes(match.alightingStop)) {
       group.alightingStopIds.push(match.alightingStop);
     }
@@ -57,8 +105,18 @@ export function StopCard({
   }
   const eligibleEtas = filterEligibleETAs(etas, destinationMatches);
   for (const eta of eligibleEtas) {
-    const key = routeGroupKey(eta.route, eta.dir);
-    const group = grouped.get(key) ?? { route: eta.route, etas: [], alightingStopIds: [] };
+    const boardingStopId = normalize(eta.stop);
+    if (!boardingStopId) continue;
+    const key = routeGroupKey(eta.route, eta.dir, eta.service_type, boardingStopId);
+    const group = grouped.get(key) ?? {
+      route: normalize(eta.route),
+      bound: eta.dir,
+      serviceType: normalize(eta.service_type),
+      boardingStopId,
+      isSpecial: isSpecialService(normalize(eta.service_type)),
+      etas: [],
+      alightingStopIds: [],
+    };
     if (group.etas.length < 3) {
       group.etas.push(eta);
       grouped.set(key, group);
@@ -75,17 +133,14 @@ export function StopCard({
         )
       : [...grouped.keys()];
 
-  const finalKeys = favouritesOnly
-    ? visibleKeys.filter((key) => favouriteRoutes.has(grouped.get(key)!.route.toUpperCase()))
-    : visibleKeys;
+  const finalKeys = visibleKeys;
 
   /* Route filtering may hide a card. Destination-valid cards remain visible without live ETA. */
   const matchingRouteWithoutETA = destinationMatches?.some((match) =>
     (routeFilters.length === 0 || routeFilters.some((filter) => match.route.toUpperCase().includes(filter)))
-    && (!favouritesOnly || favouriteRoutes.has(match.route.toUpperCase())),
   ) ?? false;
   if (
-    (routeFilters.length > 0 || favouritesOnly)
+    routeFilters.length > 0
     && finalKeys.length === 0
     && !matchingRouteWithoutETA
     && !etasLoading
@@ -144,17 +199,28 @@ export function StopCard({
             </div>
           ))
         ) : finalKeys.length === 0 ? (
-          <p className="py-3 text-sm text-[var(--muted)] text-center">{lang === 'en' ? 'No arrivals available' : '暫無班次資料'}</p>
+          <p className="py-3 text-sm text-[var(--muted)] text-center">
+            {stopETAUnavailable
+              ? lang === 'en' ? 'ETA unavailable' : '暫未能取得到站時間'
+              : lang === 'en' ? 'No arrivals available' : '暫無班次資料'}
+          </p>
         ) : (
           finalKeys.map((key) => (
             <ETARow
               key={key}
               route={grouped.get(key)!.route}
+              bound={grouped.get(key)!.bound}
+              serviceType={grouped.get(key)!.serviceType}
+              boardingStopId={grouped.get(key)!.boardingStopId}
+              isSpecial={grouped.get(key)!.isSpecial}
               etas={grouped.get(key)!.etas}
               alightingStopIds={grouped.get(key)!.alightingStopIds}
               destinationStopNames={destinationStopNames}
               destinationStops={destinationStops}
               onViewAlightingStop={setMapStop}
+              freshness={stopFreshness}
+              lastSuccessfulAt={stopLastSuccessfulAt}
+              etaLoading={stopETALoading}
             />
           ))
         )}

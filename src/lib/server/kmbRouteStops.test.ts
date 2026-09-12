@@ -46,7 +46,7 @@ describe('fetchKmbRouteStops daily snapshot', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledWith(
       'https://data.etabus.gov.hk/v1/transport/kmb/route-stop',
-      { cache: 'no-store' },
+      expect.objectContaining({ cache: 'no-store', signal: expect.any(AbortSignal) }),
     );
   });
 

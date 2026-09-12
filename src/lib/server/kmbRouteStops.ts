@@ -1,9 +1,7 @@
 import type { RouteStop } from '@/lib/types';
+import { getKmbServiceDay } from './kmbServiceDay';
 
 const KMB_ROUTE_STOPS_URL = 'https://data.etabus.gov.hk/v1/transport/kmb/route-stop';
-const HONG_KONG_OFFSET_MS = 8 * 60 * 60 * 1_000;
-const KMB_REFRESH_HOUR = 5;
-const KMB_REFRESH_GRACE_MINUTES = 10;
 const REFRESH_FAILURE_BACKOFF_MS = 60_000;
 
 interface RouteStopSnapshot {
@@ -62,29 +60,10 @@ function normalizeRouteStop(value: unknown): RouteStop | null {
   };
 }
 
-/**
- * KMB publishes the new route-stop dataset daily at 05:00 HKT. A ten-minute
- * grace period avoids capturing the previous feed while publication finishes.
- */
-export function getKmbServiceDay(now: Date): string {
-  const hongKongTime = new Date(now.getTime() + HONG_KONG_OFFSET_MS);
-  const beforeRefreshBoundary = hongKongTime.getUTCHours() < KMB_REFRESH_HOUR
-    || (
-      hongKongTime.getUTCHours() === KMB_REFRESH_HOUR
-      && hongKongTime.getUTCMinutes() < KMB_REFRESH_GRACE_MINUTES
-    );
-
-  if (beforeRefreshBoundary) {
-    hongKongTime.setUTCDate(hongKongTime.getUTCDate() - 1);
-  }
-
-  return hongKongTime.toISOString().slice(0, 10);
-}
-
 async function loadKmbRouteStops(): Promise<RouteStop[]> {
   let response: Response;
   try {
-    response = await fetch(KMB_ROUTE_STOPS_URL, { cache: 'no-store' });
+    response = await fetch(KMB_ROUTE_STOPS_URL, { cache: 'no-store', signal: AbortSignal.timeout(10_000) });
   } catch (error) {
     throw new KmbRouteStopsError('Unable to reach the KMB route data service', { cause: error });
   }
@@ -170,3 +149,5 @@ export function resetKmbRouteStopsCacheForTests(): void {
   pendingRefresh = null;
   failedRefresh = null;
 }
+
+export { getKmbServiceDay };

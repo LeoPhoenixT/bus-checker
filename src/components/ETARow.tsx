@@ -1,23 +1,31 @@
 'use client';
 import { Fragment } from 'react';
+import Link from 'next/link';
 import { MapPin } from 'lucide-react';
 import clsx from 'clsx';
 import { useLang } from '@/contexts/LanguageContext';
-import { useBookmarks } from '@/contexts/BookmarkContext';
 import type { DestinationStopNames, ETAEntry, Stop } from '@/lib/types';
+import type { ETAFreshness } from '@/lib/etaFreshness';
+import { getETAAgeSeconds } from '@/lib/etaFreshness';
+import { getMinutesUntil } from '@/lib/etaTime';
 
 interface ETARowProps {
   route: string;
+  bound: 'I' | 'O';
+  serviceType: string;
+  boardingStopId: string;
+  isSpecial?: boolean;
   etas: ETAEntry[];
   alightingStopIds?: string[];
   destinationStopNames?: DestinationStopNames;
   destinationStops?: Record<string, Stop>;
   onViewAlightingStop?: (stop: Stop) => void;
+  freshness?: ETAFreshness;
+  lastSuccessfulAt?: Date | null;
+  etaLoading?: boolean;
 }
 
-export function getMinutesUntil(etaIso: string): number {
-  return Math.floor((new Date(etaIso).getTime() - Date.now()) / 60_000);
-}
+export { getMinutesUntil } from '@/lib/etaTime';
 
 // Deterministic colour per route number — readable in both light & dark
 const ROUTE_COLOURS = [
@@ -39,18 +47,29 @@ function routeColour(route: string): string {
 
 export function ETARow({
   route,
+  bound,
+  serviceType,
+  boardingStopId,
+  isSpecial = false,
   etas,
   alightingStopIds = [],
   destinationStopNames = {},
   destinationStops = {},
   onViewAlightingStop,
+  freshness = 'fresh',
+  lastSuccessfulAt = null,
+  etaLoading = false,
 }: ETARowProps) {
   const { lang } = useLang();
-  const { isBookmarked, toggleBookmark } = useBookmarks();
 
   const first = etas[0];
   const dest = first ? (lang === 'en' ? first.dest_en : first.dest_tc) : '';
   const destPrefix = lang === 'en' ? 'To ' : '往 ';
+  const routeDetailParams = new URLSearchParams({ bound, serviceType, stop: boardingStopId });
+  const routeDetailHref = `/routes/${encodeURIComponent(route)}?${routeDetailParams}`;
+  const routeDetailLabel = lang === 'en'
+    ? `View ${route}${isSpecial ? ' special service' : ''} route details`
+    : `查看${route}${isSpecial ? '特別班' : ''}路線詳情`;
   const alightingStops = alightingStopIds.map((stopId) => ({
     id: stopId,
     name: destinationStopNames[stopId]?.[lang] ?? stopId,
@@ -76,14 +95,38 @@ export function ETARow({
   const timeUnit = lang === 'en' ? 'min' : '分';
   const arrivingNow = lang === 'en' ? 'Arriving' : '即將到達';
   const departed = lang === 'en' ? 'Departed' : '已離站';
+  const ageSeconds = getETAAgeSeconds(lastSuccessfulAt);
+  const ageLabel = ageSeconds === null
+    ? null
+    : ageSeconds < 60
+      ? (lang === 'en' ? `${ageSeconds}s ago` : `${ageSeconds} 秒前`)
+      : (lang === 'en' ? `${Math.floor(ageSeconds / 60)} min ago` : `${Math.floor(ageSeconds / 60)} 分鐘前`);
+  const hidesLiveETA = !etaLoading && (freshness === 'very-stale' || freshness === 'unavailable');
 
-  // Handle bookmark toggle
-  const handleBookmarkClick = () => {
-    toggleBookmark(route);
-  };
+  const freshnessNotice = etaLoading && lastSuccessfulAt === null
+    ? (lang === 'en' ? 'Loading ETA…' : '正在載入到站時間…')
+    : freshness === 'slightly-old'
+    ? (lang === 'en' ? `Updated ${ageLabel}` : `${ageLabel}更新`)
+    : freshness === 'stale'
+      ? (lang === 'en' ? `ETA may be outdated · Updated ${ageLabel}` : `到站時間可能已過時 · ${ageLabel}更新`)
+      : freshness === 'very-stale'
+        ? (lang === 'en'
+          ? `ETA unavailable${ageLabel ? ` · Last updated ${ageLabel}` : ''}`
+          : `暫未能提供到站時間${ageLabel ? ` · 最後更新於 ${ageLabel}` : ''}`)
+        : freshness === 'unavailable'
+          ? (lang === 'en' ? 'ETA unavailable' : '暫未能提供到站時間')
+          : null;
 
   // Render primary (nearest) ETA badge
   const renderPrimaryBadge = () => {
+    if (etaLoading && lastSuccessfulAt === null) {
+      return <span className="text-xs text-[var(--muted)]">…</span>;
+    }
+
+    if (hidesLiveETA) {
+      return <span className="text-xs font-medium text-[var(--muted)]">{lang === 'en' ? 'Unavailable' : '暫未能提供'}</span>;
+    }
+
     if (!nearest) return <span className="text-xs text-[var(--muted)]">—</span>;
 
     if (nearest.minutes === null) {
@@ -95,6 +138,13 @@ export function ETARow({
     }
 
     if (nearest.minutes === 0) {
+      if (freshness === 'stale') {
+        return (
+          <span className="rounded-full border border-[var(--divider)] bg-[var(--card-border)] px-2.5 py-0.5 text-xs font-bold text-[var(--muted)]">
+            {arrivingNow}
+          </span>
+        );
+      }
       return (
         <span className="animate-pulse rounded-full border border-red-500/40 bg-red-500/20 px-2.5 py-0.5 text-xs font-bold text-red-500 dark:text-red-400">
           {arrivingNow}
@@ -106,11 +156,13 @@ export function ETARow({
       <span
         className={clsx(
           'rounded-full border px-2.5 py-0.5 text-xs font-bold tabular-nums',
-          nearest.minutes <= 2
-            ? 'border-red-500/40 bg-red-500/15 text-red-600 dark:text-red-400'
-            : nearest.minutes <= 5
-              ? 'border-amber-500/40 bg-amber-500/15 text-amber-600 dark:text-amber-400'
-              : 'border-green-500/40 bg-green-500/15 text-green-600 dark:text-green-400',
+          freshness === 'stale'
+            ? 'border-[var(--divider)] bg-[var(--card-border)] text-[var(--muted)]'
+            : nearest.minutes <= 2
+              ? 'border-red-500/40 bg-red-500/15 text-red-600 dark:text-red-400'
+              : nearest.minutes <= 5
+                ? 'border-amber-500/40 bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                : 'border-green-500/40 bg-green-500/15 text-green-600 dark:text-green-400',
         )}
       >
         {nearest.minutes} {timeUnit}
@@ -122,14 +174,17 @@ export function ETARow({
     <div className="flex items-center gap-3 py-2.5">
       {/* Route badge */}
       <div className="flex items-center gap-1.5 shrink-0">
-        <span
+        <Link
+          href={routeDetailHref}
+          aria-label={routeDetailLabel}
+          title={routeDetailLabel}
           className={clsx(
-            'inline-block w-16 shrink-0 rounded-lg border px-1.5 py-0.5 text-center text-xs font-bold',
+            'inline-flex w-16 shrink-0 items-center justify-center rounded-lg border px-1.5 py-0.5 text-center text-xs font-bold transition hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-500/60',
             routeColour(route),
           )}
         >
           {route}
-        </span>
+        </Link>
       </div>
 
       {/* Destination with direction prefix */}
@@ -163,8 +218,23 @@ export function ETARow({
             ))}
           </p>
         )}
+        {freshnessNotice && (
+          <p className={clsx(
+            'mt-0.5 text-[11px] leading-snug',
+            freshness === 'stale' || freshness === 'very-stale' || freshness === 'unavailable'
+              ? 'text-amber-700 dark:text-amber-300'
+              : 'text-[var(--muted)]',
+          )}>
+            {freshnessNotice}
+          </p>
+        )}
+        {isSpecial && (
+          <p className="mt-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+            {lang === 'en' ? 'Special service' : '特別班'}
+          </p>
+        )}
         {/* Later arrival times shown as smaller text beneath */}
-        {later.length > 0 && (
+        {!hidesLiveETA && later.length > 0 && (
           <p className="mt-0.5 flex flex-wrap gap-1.5">
             {later.map((t, i) => {
               const rmk = lang === 'en' ? t.rmk_en : t.rmk_tc;
@@ -191,16 +261,6 @@ export function ETARow({
       {/* Nearest arrival badge */}
       <div className="shrink-0">{renderPrimaryBadge()}</div>
 
-      {/* Bookmark star icon */}
-      <button
-        onClick={handleBookmarkClick}
-        className="shrink-0 text-lg transition-all hover:scale-110 active:scale-95"
-        aria-label={isBookmarked(route)
-          ? lang === 'en' ? 'Remove bookmark' : '移除收藏'
-          : lang === 'en' ? 'Add bookmark' : '加入收藏'}
-      >
-        {isBookmarked(route) ? '⭐' : '☆'}
-      </button>
     </div>
   );
 }

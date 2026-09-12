@@ -55,10 +55,63 @@ export interface RouteStop {
   data_timestamp: string;
 }
 
+/** A KMB route variant is only unique together with its direction and service type. */
+export interface RouteVariantId {
+  route: string;
+  bound: 'I' | 'O';
+  serviceType: string;
+}
+
+export interface RouteVariant extends RouteVariantId {
+  originEn: string;
+  originTc: string;
+  destinationEn: string;
+  destinationTc: string;
+  isSpecial: boolean;
+}
+
+/**
+ * A favourite is a specific place to board a specific KMB route variant.
+ * Display labels deliberately live elsewhere: they can change without
+ * changing the durable identity.
+ */
+export interface FavouriteRouteStop extends RouteVariantId {
+  stopId: string;
+}
+
+export interface FavouriteRouteStopMetadata {
+  favourite: FavouriteRouteStop;
+  status: 'resolved' | 'missing' | 'unavailable';
+  variant?: RouteVariant;
+  stop?: RouteDetailStop;
+}
+
+export interface RouteDetailStop {
+  stopId: string;
+  seq: number;
+  nameEn: string;
+  nameTc: string;
+  lat: number;
+  long: number;
+}
+
+export interface RouteDetail {
+  variant: RouteVariant;
+  stops: RouteDetailStop[];
+  reverseVariants: RouteVariant[];
+}
+
+export interface RouteSearchResult {
+  routes: RouteVariant[];
+  truncated: boolean;
+}
+
 export interface DirectRouteMatch {
   route: string;
   bound: 'I' | 'O';
   serviceType: string;
+  /** Exact KMB boarding stop ID. This remains necessary when nearby stops are grouped. */
+  boardingStop: string;
   boardingSeq: number;
   alightingStop: string;
   alightingSeq: number;

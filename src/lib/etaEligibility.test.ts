@@ -11,7 +11,7 @@ function eta(overrides: Partial<ETAEntry> = {}): ETAEntry {
 }
 
 const matches: DirectRouteMatch[] = [{
-  route: '88X', bound: 'O', serviceType: '1', boardingSeq: 5,
+  route: '88X', bound: 'O', serviceType: '1', boardingStop: 'ORIGIN01', boardingSeq: 5,
   alightingStop: 'DEST0001', alightingSeq: 18,
 }];
 
@@ -41,5 +41,12 @@ describe('filterEligibleETAs', () => {
 
   it('normalizes numeric service types returned by the live ETA API', () => {
     expect(filterEligibleETAs([eta({ service_type: 1 })], matches)).toHaveLength(1);
+  });
+
+  it('does not use a colocated stop ID when only another boarding stop reaches the destination', () => {
+    expect(filterEligibleETAs([
+      eta({ stop: 'ORIGIN01' }),
+      eta({ stop: 'ORIGIN02' }),
+    ], matches)).toEqual([eta({ stop: 'ORIGIN01' })]);
   });
 });

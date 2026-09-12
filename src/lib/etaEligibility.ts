@@ -12,11 +12,11 @@ export function filterEligibleETAs(
 
   const allowed = new Set(
     matches.map((match) =>
-      `${normalize(match.route)}|${normalize(match.bound)}|${normalize(match.serviceType)}`,
+      `${normalize(match.route)}|${normalize(match.bound)}|${normalize(match.serviceType)}|${normalize(match.boardingStop)}`,
     ),
   );
 
   return etas.filter((eta) =>
-    allowed.has(`${normalize(eta.route)}|${normalize(eta.dir)}|${normalize(eta.service_type)}`),
+    allowed.has(`${normalize(eta.route)}|${normalize(eta.dir)}|${normalize(eta.service_type)}|${normalize(eta.stop)}`),
   );
 }

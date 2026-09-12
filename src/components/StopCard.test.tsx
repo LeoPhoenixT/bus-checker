@@ -1,6 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BookmarkProvider } from '@/contexts/BookmarkContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { StopCard } from './StopCard';
 import type { DirectRouteMatch, ETAEntry, NearbyStop, Stop } from '@/lib/types';
@@ -26,7 +25,7 @@ function eta(overrides: Partial<ETAEntry> = {}): ETAEntry {
 }
 
 const match: DirectRouteMatch = {
-  route: '88X', bound: 'O', serviceType: '1', boardingSeq: 5,
+  route: '88X', bound: 'O', serviceType: '1', boardingStop: 'ORIGIN01', boardingSeq: 5,
   alightingStop: 'DEST0001', alightingSeq: 18,
 };
 
@@ -39,8 +38,7 @@ function renderCard(
   props: Partial<React.ComponentProps<typeof StopCard>> = {},
 ) {
   return render(
-    <BookmarkProvider>
-      <LanguageProvider>
+    <LanguageProvider>
         <StopCard
           stop={stop}
           etas={etas}
@@ -50,8 +48,7 @@ function renderCard(
           destinationStopNames={destinationStopNames}
           {...props}
         />
-      </LanguageProvider>
-    </BookmarkProvider>,
+    </LanguageProvider>,
   );
 }
 
@@ -76,7 +73,7 @@ describe('StopCard destination eligibility', () => {
     expect(screen.getByText('88X')).toBeDefined();
   });
 
-  it('lists distinct alighting stops across merged service types', () => {
+  it('keeps special service variants separate and gives each exact variant a Route Detail link', () => {
     renderCard([], [
       match,
       { ...match, serviceType: '2', alightingStop: 'DEST0002', alightingSeq: 19 },
@@ -85,9 +82,29 @@ describe('StopCard destination eligibility', () => {
       DEST0001: { en: 'First Stop', tc: '第一站' },
       DEST0002: { en: 'Second Stop', tc: '第二站' },
     });
-    expect(screen.getByText('落車站：')).toBeDefined();
-    expect(screen.getByText('第一站')).toBeDefined();
+    expect(screen.getAllByText('落車站：')).toHaveLength(3);
+    expect(screen.getAllByText('第一站')).toHaveLength(2);
     expect(screen.getByText('第二站')).toBeDefined();
+    expect(screen.getAllByText('特別班')).toHaveLength(2);
+    expect(screen.getByRole('link', { name: '查看88X路線詳情' }).getAttribute('href'))
+      .toBe('/routes/88X?bound=O&serviceType=1&stop=ORIGIN01');
+    expect(screen.getAllByRole('link', { name: '查看88X特別班路線詳情' }).map((link) => link.getAttribute('href')))
+      .toEqual([
+        '/routes/88X?bound=O&serviceType=2&stop=ORIGIN01',
+        '/routes/88X?bound=O&serviceType=3&stop=ORIGIN01',
+      ]);
+  });
+
+  it('keeps colocated stop IDs separate in Route Detail links', () => {
+    renderCard([
+      eta({ stop: 'ORIGIN01', service_type: '1' }),
+      eta({ stop: 'ORIGIN02', service_type: '1', eta_seq: 2 }),
+    ], undefined);
+    const links = screen.getAllByRole('link', { name: '查看88X路線詳情' });
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '/routes/88X?bound=O&serviceType=1&stop=ORIGIN01',
+      '/routes/88X?bound=O&serviceType=1&stop=ORIGIN02',
+    ]);
   });
 
   it('opens the selected alighting stop on the map', () => {
@@ -104,46 +121,44 @@ describe('StopCard destination eligibility', () => {
   });
 });
 
-describe('StopCard favourite route filtering', () => {
-  it('leaves normal routes visible when disabled', () => {
-    renderCard([eta(), eta({ route: '74B' })], undefined, {}, { favouritesOnly: false });
-    expect(screen.getByText('88X')).toBeDefined();
-    expect(screen.getByText('74B')).toBeDefined();
+describe('StopCard ETA freshness', () => {
+  it('labels stale predictions and removes their confident live colour', () => {
+    const lastSuccessfulAt = new Date(Date.now() - 130_000);
+    const upcoming = eta({ eta: new Date(Date.now() + 120_000).toISOString() });
+    renderCard([upcoming], undefined, {}, {
+      etaStates: {
+        ORIGIN01: {
+          data: [upcoming],
+          lastSuccessfulAt,
+          lastAttemptAt: lastSuccessfulAt,
+          attemptStatus: 'error',
+          error: 'Temporary API error',
+          freshness: 'stale',
+        },
+      },
+    });
+
+    expect(screen.getByText('到站時間可能已過時', { exact: false })).toBeDefined();
+    expect(screen.getByText('1 分').className).toContain('text-[var(--muted)]');
   });
 
-  it('keeps only favourite routes in a mixed stop', () => {
-    renderCard([eta(), eta({ route: '74B' })], undefined, {}, {
-      favouritesOnly: true,
-      favouriteRoutes: new Set(['74B']),
+  it('does not present five-minute-old predictions as live ETA', () => {
+    const lastSuccessfulAt = new Date(Date.now() - 301_000);
+    const upcoming = eta({ eta: new Date(Date.now() + 120_000).toISOString() });
+    renderCard([upcoming], undefined, {}, {
+      etaStates: {
+        ORIGIN01: {
+          data: [upcoming],
+          lastSuccessfulAt,
+          lastAttemptAt: lastSuccessfulAt,
+          attemptStatus: 'error',
+          error: 'Temporary API error',
+          freshness: 'very-stale',
+        },
+      },
     });
-    expect(screen.getByText('74B')).toBeDefined();
-    expect(screen.queryByText('88X')).toBeNull();
-    expect(screen.getByText('ORIGIN01')).toBeDefined();
-  });
 
-  it('hides a stop with no favourite routes', () => {
-    renderCard([eta()], undefined, {}, {
-      favouritesOnly: true,
-      favouriteRoutes: new Set(['74B']),
-    });
-    expect(screen.queryByText('ORIGIN01')).toBeNull();
-  });
-
-  it('combines favourite and route-number filters with AND', () => {
-    renderCard([eta(), eta({ route: '74B' })], undefined, {}, {
-      routeFilters: ['74'],
-      favouritesOnly: true,
-      favouriteRoutes: new Set(['88X']),
-    });
-    expect(screen.queryByText('ORIGIN01')).toBeNull();
-  });
-
-  it('filters destination-valid routes, including routes without live ETA', () => {
-    renderCard([], [match, { ...match, route: '74B' }], {}, {
-      favouritesOnly: true,
-      favouriteRoutes: new Set(['88X']),
-    });
-    expect(screen.getByText('88X')).toBeDefined();
-    expect(screen.queryByText('74B')).toBeNull();
+    expect(screen.getByText('暫未能提供到站時間', { exact: false })).toBeDefined();
+    expect(screen.queryByText('1 分')).toBeNull();
   });
 });

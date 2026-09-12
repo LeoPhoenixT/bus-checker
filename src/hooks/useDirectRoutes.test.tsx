@@ -40,14 +40,14 @@ describe('useDirectRoutes', () => {
     rerender({ destination: 'DEST0002' });
 
     const current = { ORIGIN01: [{
-      route: '2', bound: 'O' as const, serviceType: '1', boardingSeq: 1,
+      route: '2', bound: 'O' as const, serviceType: '1', boardingStop: 'ORIGIN01', boardingSeq: 1,
       alightingStop: 'DEST0002', alightingSeq: 2,
     }] };
     await act(async () => second.resolve(response(current)));
     await waitFor(() => expect(result.current.matchesByOriginStop).toEqual(current));
 
     const stale = { ORIGIN01: [{
-      route: '1', bound: 'O' as const, serviceType: '1', boardingSeq: 1,
+      route: '1', bound: 'O' as const, serviceType: '1', boardingStop: 'ORIGIN01', boardingSeq: 1,
       alightingStop: 'DEST0001', alightingSeq: 2,
     }] };
     await act(async () => first.resolve(response(stale)));

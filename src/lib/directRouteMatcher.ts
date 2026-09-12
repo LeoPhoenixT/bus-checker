@@ -63,6 +63,7 @@ export function matchDirectRoutes(
           route: normalize(boarding.route),
           bound: normalize(boarding.bound) as 'I' | 'O',
           serviceType: normalize(boarding.service_type),
+          boardingStop: normalize(boarding.stop),
           boardingSeq: boarding.seq,
           alightingStop: normalize(alighting.stop),
           alightingSeq: alighting.seq,
