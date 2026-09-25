@@ -13,6 +13,7 @@ const stop: Stop = {
 };
 
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.mocked(getCachedStops).mockResolvedValue([stop]);
 });
@@ -143,5 +144,23 @@ describe('DestinationSearch', () => {
 
     expect(screen.getByText('示例轉車站 (目標月台)')).toBeDefined();
     expect(screen.getByText('PLATFORM_TARGET')).toBeDefined();
+  });
+
+  it('reloads stop search when an open tab crosses the KMB service-day boundary', async () => {
+    vi.setSystemTime(new Date('2026-08-04T21:09:59.000Z'));
+    vi.mocked(getCachedStops)
+      .mockResolvedValueOnce([{ ...stop, stop: 'OLDSTOP', name_tc: '舊站' }])
+      .mockResolvedValueOnce([{ ...stop, stop: 'NEWSTOP', name_tc: '新站' }]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ results: [] })));
+    render(<LanguageProvider><DestinationSearch onSelectStop={vi.fn()} onSelectAddress={vi.fn()} /></LanguageProvider>);
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '站' } });
+    expect(screen.getByText('舊站')).toBeDefined();
+
+    vi.setSystemTime(new Date('2026-08-04T21:10:00.000Z'));
+    fireEvent.focus(window);
+    await waitFor(() => expect(screen.getByText('新站')).toBeDefined());
+    expect(screen.queryByText('舊站')).toBeNull();
+    expect(getCachedStops).toHaveBeenCalledTimes(2);
   });
 });

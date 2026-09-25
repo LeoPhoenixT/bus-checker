@@ -42,13 +42,22 @@ export async function fetchFavouriteRouteStopMetadata(
   items: FavouriteRouteStop[],
   { signal }: FetchStopETAOptions = {},
 ): Promise<FavouriteRouteStopMetadata[]> {
-  const res = await fetch('/api/favourite-route-stops', {
-    method: 'POST',
-    signal,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items }),
-  });
-  if (!res.ok) throw new Error(`Failed to resolve favourites: ${res.status}`);
-  const body = await res.json() as Partial<{ items: FavouriteRouteStopMetadata[] }>;
-  return body.items ?? [];
+  const metadata: FavouriteRouteStopMetadata[] = [];
+  for (let start = 0; start < items.length; start += 100) {
+    signal?.throwIfAborted();
+    const batch = items.slice(start, start + 100);
+    const res = await fetch('/api/favourite-route-stops', {
+      method: 'POST',
+      signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: batch }),
+    });
+    if (!res.ok) throw new Error(`Failed to resolve favourites: ${res.status}`);
+    const body: unknown = await res.json();
+    if (!body || typeof body !== 'object' || !('items' in body) || !Array.isArray(body.items) || body.items.length !== batch.length) {
+      throw new Error('Invalid favourites metadata response');
+    }
+    metadata.push(...body.items as FavouriteRouteStopMetadata[]);
+  }
+  return metadata;
 }

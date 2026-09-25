@@ -37,4 +37,23 @@ describe('GET /api/stop-eta/[stopId]', () => {
     expect(response.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it.each([
+    null,
+    { data: null },
+    { data: [null] },
+    { data: [{ route: '87D', dir: 'O', service_type: '1', eta: '2026-09-11T16:35:00+08:00', dest_tc: {} }] },
+    { data: [{ route: '87D', dir: 'O', service_type: '1', eta: 'invalid-date' }] },
+  ])('rejects a malformed upstream payload as a failed ETA request: %j', async (payload) => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }));
+    const response = await GET(new Request('http://localhost/api/stop-eta/8CFD0DAAA2D9B47E'), context('8CFD0DAAA2D9B47E'));
+    expect(response.status).toBe(502);
+  });
+
+  it('accepts an empty ETA list as a valid response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ type: 'ETA', data: [] }), { status: 200 }));
+    const response = await GET(new Request('http://localhost/api/stop-eta/8CFD0DAAA2D9B47E'), context('8CFD0DAAA2D9B47E'));
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ data: [] });
+  });
 });
