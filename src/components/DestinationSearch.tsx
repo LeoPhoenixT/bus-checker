@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { LoaderCircle, MapPin, Search } from 'lucide-react';
 import { getCachedStops } from '@/lib/clientStops';
+import { useKmbServiceDay } from '@/hooks/useKmbServiceDay';
 import { useLang } from '@/contexts/LanguageContext';
 import type { AddressSearchResult, Stop } from '@/lib/types';
 
@@ -23,10 +24,13 @@ export function DestinationSearch({ onSelectStop, onSelectAddress, initialQuery 
   const [addressLoading, setAddressLoading] = useState(false);
   const [addressError, setAddressError] = useState<string | null>(null);
   const normalizedQuery = query.trim().toLocaleLowerCase();
+  const serviceDay = useKmbServiceDay();
 
   useEffect(() => {
-    void getCachedStops().then(setStops).catch(() => setStops([]));
-  }, []);
+    let active = true;
+    void getCachedStops().then((items) => { if (active) setStops(items); }).catch(() => { if (active) setStops([]); });
+    return () => { active = false; };
+  }, [serviceDay]);
 
   const stopResults = useMemo(() => {
     if (!normalizedQuery) return [];

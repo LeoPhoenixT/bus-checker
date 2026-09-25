@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { APP_CONFIG } from '@/config';
 import { getCachedStops } from '@/lib/clientStops';
+import { useKmbServiceDay } from './useKmbServiceDay';
 import { filterNearby } from '@/lib/geo';
 import type { NearbyStop } from '@/lib/types';
 
@@ -18,15 +19,18 @@ export function useNearbyStops(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const coordsRef = useRef({ lat, lon });
+  const serviceDay = useKmbServiceDay();
   coordsRef.current = { lat, lon };
 
   useEffect(() => {
     if (lat == null || lon == null) return;
+    let active = true;
     setLoading(true);
     setError(null);
 
     getCachedStops()
       .then((allStops) => {
+        if (!active) return;
         // Use the latest coords in case position updated while fetching
         const { lat: curLat, lon: curLon } = coordsRef.current;
         if (curLat != null && curLon != null) {
@@ -46,10 +50,11 @@ export function useNearbyStops(
           setDestinationStops([]);
         }
       })
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : 'Failed to load stops'),
-      )
-      .finally(() => setLoading(false));
+      .catch((err: unknown) => {
+        if (active) setError(err instanceof Error ? err.message : 'Failed to load stops');
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   // Only re-run when coordinates meaningfully change (rounded to 5 dp ≈ 1 m precision)
   // Also re-run when radius or destination changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -60,6 +65,7 @@ export function useNearbyStops(
     destinationLat != null ? Math.round(destinationLat * 1e4) : null,
     destinationLon != null ? Math.round(destinationLon * 1e4) : null,
     destinationRadiusM,
+    serviceDay,
   ]);
 
   return { stops, destinationStops, loading, error };

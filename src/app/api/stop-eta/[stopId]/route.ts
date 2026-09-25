@@ -13,15 +13,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * omit their redundant `stop` property. Restore it at the API boundary so
  * downstream consumers can keep exact stop filtering without losing live ETA.
  */
-function normalizeStopETAResponse(value: unknown, stopId: string): unknown {
-  if (!isRecord(value) || !Array.isArray(value.data)) return value;
+function normalizeStopETAResponse(value: unknown, stopId: string): Record<string, unknown> | null {
+  if (!isRecord(value) || !Array.isArray(value.data)) return null;
+  const rows = value.data.map((entry) => {
+    if (!isRecord(entry)
+      || typeof entry.route !== 'string' || !entry.route.trim()
+      || (entry.dir !== 'I' && entry.dir !== 'O')
+      || !((typeof entry.service_type === 'string' && entry.service_type.trim()) || typeof entry.service_type === 'number')
+      || !('eta' in entry) || !(entry.eta === null || (typeof entry.eta === 'string' && Number.isFinite(Date.parse(entry.eta))))
+      || (entry.dest_en !== undefined && typeof entry.dest_en !== 'string')
+      || (entry.dest_tc !== undefined && typeof entry.dest_tc !== 'string')) return null;
+    const entryStop = typeof entry.stop === 'string' ? entry.stop.trim() : '';
+    return entryStop ? entry : { ...entry, stop: stopId };
+  });
+  if (rows.some((entry) => entry === null)) return null;
   return {
     ...value,
-    data: value.data.map((entry) => {
-      if (!isRecord(entry)) return entry;
-      const entryStop = typeof entry.stop === 'string' ? entry.stop.trim() : '';
-      return entryStop ? entry : { ...entry, stop: stopId };
-    }),
+    data: rows,
   };
 }
 
@@ -48,6 +56,13 @@ export async function GET(
     );
   }
 
-  const data: unknown = await res.json();
-  return NextResponse.json(normalizeStopETAResponse(data, normalizedStopId));
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid KMB ETA response' }, { status: 502 });
+  }
+  const normalized = normalizeStopETAResponse(data, normalizedStopId);
+  if (!normalized) return NextResponse.json({ error: 'Invalid KMB ETA response' }, { status: 502 });
+  return NextResponse.json(normalized);
 }

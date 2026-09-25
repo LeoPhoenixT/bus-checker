@@ -9,6 +9,8 @@ vi.mock('@/lib/server/kmbRoutes', () => ({
 }));
 
 import { POST } from './route';
+import { fetchFavouriteRouteStopMetadata } from '@/lib/kmb';
+import type { FavouriteRouteStop } from '@/lib/types';
 
 afterEach(() => vi.clearAllMocks());
 
@@ -31,5 +33,21 @@ describe('POST /api/favourite-route-stops', () => {
     }));
     expect(response.status).toBe(400);
     expect(getKmbFavouriteRouteStopMetadataMock).not.toHaveBeenCalled();
+  });
+
+  it('resolves 101 stored favourites through the client and actual API limit', async () => {
+    const favourites: FavouriteRouteStop[] = Array.from({ length: 101 }, (_, index) => ({
+      route: '87D', bound: 'O', serviceType: '1', stopId: `STOP${String(index).padStart(4, '0')}`,
+    }));
+    getKmbFavouriteRouteStopMetadataMock.mockImplementation(async (items: FavouriteRouteStop[]) => (
+      items.map((favourite) => ({ favourite, status: 'missing' }))
+    ));
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((_url, init) => POST(new Request('http://localhost/api/favourite-route-stops', init)));
+
+    const metadata = await fetchFavouriteRouteStopMetadata(favourites);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(getKmbFavouriteRouteStopMetadataMock).toHaveBeenCalledTimes(2);
+    expect(metadata.map((item) => item.favourite)).toEqual(favourites);
+    fetchMock.mockRestore();
   });
 });
