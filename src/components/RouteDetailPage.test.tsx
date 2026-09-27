@@ -15,6 +15,11 @@ vi.mock('@/lib/kmb', () => ({
   fetchRouteDetail: fetchRouteDetailMock,
   fetchStopETAs: fetchStopETAsMock,
 }));
+vi.mock('./RouteMap', () => ({
+  RouteMap: ({ onSelectStop }: { onSelectStop: (stopId: string) => void }) => (
+    <button type="button" onClick={() => onSelectStop('STOP2')}>Select stop on map</button>
+  ),
+}));
 vi.mock('next/navigation', () => ({ usePathname: () => pathname }));
 vi.mock('next/link', () => ({
   default: ({ href, children, ...props }: React.ComponentProps<'a'>) => <a href={href} {...props}>{children}</a>,
@@ -116,6 +121,17 @@ describe('RouteDetailPage', () => {
     await waitFor(() => expect(fetchStopETAsMock).toHaveBeenCalledWith('STOP2', expect.objectContaining({ signal: expect.anything() })));
     expect(fetchStopETAsMock).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: /第二站/ }).getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('selects a stop from the route map and loads its ETA', async () => {
+    fetchRouteDetailMock.mockResolvedValue(detail());
+    fetchStopETAsMock.mockResolvedValue(response([]));
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('第二站')).toBeDefined());
+    fireEvent.click(screen.getByRole('button', { name: 'Select stop on map' }));
+    expect(screen.getByRole('button', { name: /第二站/ }).getAttribute('aria-expanded')).toBe('true');
+    await waitFor(() => expect(fetchStopETAsMock).toHaveBeenCalledWith('STOP2', expect.objectContaining({ signal: expect.anything() })));
   });
 
   it('silently ignores a stale or invalid nearby stop deep link without preloading ETA', async () => {

@@ -15,6 +15,7 @@ import type { ETAEntry, FavouriteRouteStop, RouteDetail, RouteDetailStop, RouteV
 import { LanguageToggle } from './LanguageToggle';
 import { PrimaryNavigation } from './PrimaryNavigation';
 import { RefreshIndicator } from './RefreshIndicator';
+import { RouteMap } from './RouteMap';
 import { ThemeToggle } from './ThemeToggle';
 
 interface RouteDetailPageProps {
@@ -257,6 +258,13 @@ export function RouteDetailPage({ route, bound, serviceType, searchQuery, initia
                 </details>
               ) : null}
             </section>
+
+            <RouteMap
+              stops={detail.stops}
+              selectedStopId={selectedStopId}
+              onSelectStop={setSelectedStopId}
+              lang={lang}
+            />
 
             <section className="mt-6">
               <h2 className="flex items-center gap-2 text-lg font-bold text-[var(--foreground)]"><Bus className="h-5 w-5 text-blue-600 dark:text-blue-400" />{lang === 'en' ? 'Stops' : '站序'}</h2>
