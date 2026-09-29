@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchKmbRouteVariants,
+  getKmbRetryAfterSeconds,
   getKmbRouteDetail,
+  getKmbFavouriteRouteStopMetadata,
+  KmbRoutesError,
   resetKmbRoutesCacheForTests,
   searchKmbRouteVariants,
 } from './kmbRoutes';
@@ -18,6 +21,22 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('getKmbRouteDetail', () => {
+  it('resolves legacy single-occurrence favourites and keeps ambiguous legacy entries intact', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (String(url).endsWith('/route/')) return response([{ route: '10', bound: 'O', service_type: '1', orig_en: 'A', dest_en: 'B' }]);
+      if (String(url).endsWith('/route-stop')) return response([
+        { route: '10', bound: 'O', service_type: '1', stop: 'REPEATED', seq: 1 },
+        { route: '10', bound: 'O', service_type: '1', stop: 'UNIQUE', seq: 2 },
+        { route: '10', bound: 'O', service_type: '1', stop: 'REPEATED', seq: 3 },
+      ]);
+      return response(['REPEATED', 'UNIQUE'].map((stop) => ({ stop, name_en: stop, lat: 22.3, long: 114.1 })));
+    });
+    const legacy = { route: '10', bound: 'O' as const, serviceType: '1', stopId: 'REPEATED' };
+    const results = await getKmbFavouriteRouteStopMetadata([legacy, { ...legacy, boardingSeq: 1 }, { ...legacy, boardingSeq: 3 }, { ...legacy, boardingSeq: 99 }, { ...legacy, stopId: 'UNIQUE' }]);
+    expect(results.map((item) => item.status)).toEqual(['ambiguous', 'resolved', 'resolved', 'missing', 'resolved']);
+    expect(results.map((item) => item.stop?.seq)).toEqual([undefined, 1, 3, undefined, 2]);
+    expect(results[0].favourite).toEqual(legacy);
+  });
   it('uses the exact route, bound, and service type and returns stops in sequence order', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation((url: string | URL | Request) => {
       const value = String(url);
@@ -61,6 +80,28 @@ describe('getKmbRouteDetail', () => {
 
     await expect(getKmbRouteDetail('87D', 'O', '3')).resolves.toBeNull();
   });
+
+  it('omits a stop with empty coordinates instead of placing it at zero latitude and longitude', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((url: string | URL | Request) => {
+      const value = String(url);
+      if (value.endsWith('/route/')) return Promise.resolve(response([
+        { route: '87D', bound: 'O', service_type: '1', orig_en: 'A', dest_en: 'B' },
+      ]));
+      if (value.endsWith('/route-stop')) return Promise.resolve(response([
+        { route: '87D', bound: 'O', service_type: '1', seq: 1, stop: 'EMPTY' },
+        { route: '87D', bound: 'O', service_type: '1', seq: 2, stop: 'VALID' },
+      ]));
+      if (value.endsWith('/stop')) return Promise.resolve(response([
+        { stop: 'EMPTY', name_en: 'Unknown location', lat: null, long: '' },
+        { stop: 'VALID', name_en: 'Valid location', lat: '22.3', long: '114.1' },
+      ]));
+      throw new Error(`Unexpected URL: ${value}`);
+    });
+
+    const detail = await getKmbRouteDetail('87D', 'O', '1');
+    expect(detail?.stops.map((stop) => stop.stopId)).toEqual(['VALID']);
+    expect(detail?.stops[0]).toMatchObject({ lat: 22.3, long: 114.1 });
+  });
 });
 
 describe('searchKmbRouteVariants', () => {
@@ -80,6 +121,12 @@ describe('searchKmbRouteVariants', () => {
 });
 
 describe('KMB route metadata service-day cache', () => {
+  it('reports the remaining failure backoff as whole seconds', () => {
+    const error = new KmbRoutesError('Temporary failure');
+    error.retryAfterAt = Date.now() + 41_500;
+    expect(getKmbRetryAfterSeconds(error)).toBe(42);
+  });
+
   it('replaces metadata at the same 05:10 HKT service-day boundary as route stops', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(response([

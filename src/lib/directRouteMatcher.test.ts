@@ -48,7 +48,7 @@ describe('matchDirectRoutes', () => {
     )).toEqual({});
   });
 
-  it('handles repeated stops and selects a deterministic valid pair', () => {
+  it('keeps a deterministic alighting point for every valid boarding occurrence', () => {
     const result = matchDirectRoutes(
       [
         occurrence('ORIGIN01', 2),
@@ -60,12 +60,10 @@ describe('matchDirectRoutes', () => {
       ['ORIGIN01'],
       ['DEST0003', 'DEST0002', 'DEST0001'],
     );
-    expect(result.ORIGIN01[0]).toMatchObject({
-      boardingStop: 'ORIGIN01',
-      boardingSeq: 7,
-      alightingStop: 'DEST0001',
-      alightingSeq: 12,
-    });
+    expect(result.ORIGIN01.map(({ boardingSeq, alightingStop, alightingSeq }) => ({ boardingSeq, alightingStop, alightingSeq }))).toEqual([
+      { boardingSeq: 2, alightingStop: 'DEST0001', alightingSeq: 12 },
+      { boardingSeq: 7, alightingStop: 'DEST0001', alightingSeq: 12 },
+    ]);
   });
 
   it('rejects a circular journey that returns to the same stop ID', () => {

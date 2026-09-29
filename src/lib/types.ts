@@ -77,18 +77,23 @@ export interface RouteVariant extends RouteVariantId {
  */
 export interface FavouriteRouteStop extends RouteVariantId {
   stopId: string;
+  /** Absent in legacy favourites; resolve only when the stop occurs once. */
+  boardingSeq?: number;
 }
 
 export interface FavouriteRouteStopMetadata {
   favourite: FavouriteRouteStop;
-  status: 'resolved' | 'missing' | 'unavailable';
+  status: 'resolved' | 'missing' | 'unavailable' | 'ambiguous';
   variant?: RouteVariant;
   stop?: RouteDetailStop;
 }
 
-export interface RouteDetailStop {
+export interface RouteStopOccurrence {
   stopId: string;
   seq: number;
+}
+
+export interface RouteDetailStop extends RouteStopOccurrence {
   nameEn: string;
   nameTc: string;
   lat: number;

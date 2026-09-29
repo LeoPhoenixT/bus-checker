@@ -19,6 +19,8 @@ function normalizeStopETAResponse(value: unknown, stopId: string): Record<string
     if (!isRecord(entry)
       || typeof entry.route !== 'string' || !entry.route.trim()
       || (entry.dir !== 'I' && entry.dir !== 'O')
+      || !Number.isSafeInteger(entry.seq) || Number(entry.seq) <= 0
+      || !Number.isSafeInteger(entry.eta_seq) || Number(entry.eta_seq) <= 0
       || !((typeof entry.service_type === 'string' && entry.service_type.trim()) || typeof entry.service_type === 'number')
       || !('eta' in entry) || !(entry.eta === null || (typeof entry.eta === 'string' && Number.isFinite(Date.parse(entry.eta))))
       || (entry.dest_en !== undefined && typeof entry.dest_en !== 'string')
@@ -59,10 +61,14 @@ export async function GET(
   let data: unknown;
   try {
     data = await res.json();
-  } catch {
+  } catch (error) {
+    console.error('KMB ETA JSON parsing failed', { stopId: normalizedStopId, error });
     return NextResponse.json({ error: 'Invalid KMB ETA response' }, { status: 502 });
   }
   const normalized = normalizeStopETAResponse(data, normalizedStopId);
-  if (!normalized) return NextResponse.json({ error: 'Invalid KMB ETA response' }, { status: 502 });
+  if (!normalized) {
+    console.error('KMB ETA payload validation failed', { stopId: normalizedStopId });
+    return NextResponse.json({ error: 'Invalid KMB ETA response' }, { status: 502 });
+  }
   return NextResponse.json(normalized);
 }

@@ -80,6 +80,7 @@ describe('fetchKmbRouteStops daily snapshot', () => {
   });
 
   it('fails closed and backs off for 60 seconds before retrying', async () => {
+    const serverLog = vi.spyOn(console, 'error').mockImplementation(() => {});
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(upstreamResponse('1'))
       .mockResolvedValueOnce(new Response('', { status: 503 }))
@@ -90,6 +91,8 @@ describe('fetchKmbRouteStops daily snapshot', () => {
     await expect(fetchKmbRouteStops(boundary)).rejects.toThrow('HTTP 503');
     await expect(fetchKmbRouteStops(new Date(boundary.getTime() + 59_999))).rejects.toThrow('HTTP 503');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(serverLog).toHaveBeenCalledOnce();
+    expect(serverLog).toHaveBeenCalledWith('KMB route-stop refresh failed', expect.objectContaining({ retryAfterAt: boundary.getTime() + 60_000 }));
 
     const refreshed = await fetchKmbRouteStops(new Date(boundary.getTime() + 60_000));
     expect(refreshed[0].route).toBe('2');

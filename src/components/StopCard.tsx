@@ -10,6 +10,7 @@ import { isSpecialService } from '@/lib/routeVariants';
 import type { ETAFreshness } from '@/lib/etaFreshness';
 import type { StopETAStateWithFreshness } from '@/hooks/useStopETAs';
 import { getStopIds } from '@/lib/stopGroups';
+import { getMinutesUntil } from '@/lib/etaTime';
 import type { DirectRouteMatch, DestinationStopNames, NearbyStop, ETAEntry, Stop } from '@/lib/types';
 
 interface StopCardProps {
@@ -28,6 +29,7 @@ interface RouteGroup {
   bound: 'I' | 'O';
   serviceType: string;
   boardingStopId: string;
+  boardingSeq: number;
   isSpecial: boolean;
   etas: ETAEntry[];
   alightingStopIds: string[];
@@ -37,8 +39,8 @@ function normalize(value: unknown): string {
   return String(value ?? '').trim().toUpperCase();
 }
 
-function routeGroupKey(route: string, bound: string, serviceType: string | number, boardingStopId: string): string {
-  return `${normalize(route)}|${normalize(bound)}|${normalize(serviceType)}|${normalize(boardingStopId)}`;
+function routeGroupKey(route: string, bound: string, serviceType: string | number, boardingStopId: string, boardingSeq: number): string {
+  return `${normalize(route)}|${normalize(bound)}|${normalize(serviceType)}|${normalize(boardingStopId)}|${boardingSeq}`;
 }
 
 export function StopCard({
@@ -53,6 +55,7 @@ export function StopCard({
 }: StopCardProps) {
   const { lang } = useLang();
   const [mapStop, setMapStop] = useState<Stop | null>(null);
+  const [expandedRoutes, setExpandedRoutes] = useState(false);
   const name = lang === 'en' ? stop.name_en : stop.name_tc;
   const stopStates = getStopIds(stop)
     .map((stopId) => etaStates[stopId.trim().toUpperCase()])
@@ -88,12 +91,13 @@ export function StopCard({
    * safe Route Detail identity. */
   const grouped = new Map<string, RouteGroup>();
   for (const match of destinationMatches ?? []) {
-    const key = routeGroupKey(match.route, match.bound, match.serviceType, match.boardingStop);
+    const key = routeGroupKey(match.route, match.bound, match.serviceType, match.boardingStop, match.boardingSeq);
     const group = grouped.get(key) ?? {
       route: normalize(match.route),
       bound: match.bound,
       serviceType: normalize(match.serviceType),
       boardingStopId: normalize(match.boardingStop),
+      boardingSeq: match.boardingSeq,
       isSpecial: isSpecialService(normalize(match.serviceType)),
       etas: [],
       alightingStopIds: [],
@@ -106,21 +110,20 @@ export function StopCard({
   const eligibleEtas = filterEligibleETAs(etas, destinationMatches);
   for (const eta of eligibleEtas) {
     const boardingStopId = normalize(eta.stop);
-    if (!boardingStopId) continue;
-    const key = routeGroupKey(eta.route, eta.dir, eta.service_type, boardingStopId);
+    if (!boardingStopId || !Number.isSafeInteger(eta.seq) || eta.seq <= 0) continue;
+    const key = routeGroupKey(eta.route, eta.dir, eta.service_type, boardingStopId, eta.seq);
     const group = grouped.get(key) ?? {
       route: normalize(eta.route),
       bound: eta.dir,
       serviceType: normalize(eta.service_type),
       boardingStopId,
+      boardingSeq: eta.seq,
       isSpecial: isSpecialService(normalize(eta.service_type)),
       etas: [],
       alightingStopIds: [],
     };
-    if (group.etas.length < 3) {
-      group.etas.push(eta);
-      grouped.set(key, group);
-    }
+    group.etas.push(eta);
+    grouped.set(key, group);
   }
 
   /* Apply route filter — show if any active filter matches */
@@ -133,7 +136,17 @@ export function StopCard({
         )
       : [...grouped.keys()];
 
-  const finalKeys = visibleKeys;
+  const earliestArrival = (key: string) => grouped.get(key)!.etas.reduce((earliest, eta) => {
+    if (!eta.eta) return earliest;
+    const minutes = getMinutesUntil(eta.eta);
+    return minutes >= -1 ? Math.min(earliest, minutes) : earliest;
+  }, Number.POSITIVE_INFINITY);
+  const rankedKeys = routeFilters.length > 0 || destinationMatches !== undefined
+    ? visibleKeys
+    : [...visibleKeys].sort((a, b) => earliestArrival(a) - earliestArrival(b));
+  const limitRoutes = routeFilters.length === 0 && destinationMatches === undefined;
+  const finalKeys = limitRoutes && !expandedRoutes ? rankedKeys.slice(0, 5) : rankedKeys;
+  const hiddenRouteCount = limitRoutes ? rankedKeys.length - finalKeys.length : 0;
 
   /* Route filtering may hide a card. Destination-valid cards remain visible without live ETA. */
   const matchingRouteWithoutETA = destinationMatches?.some((match) =>
@@ -205,24 +218,45 @@ export function StopCard({
               : lang === 'en' ? 'No arrivals available' : '暫無班次資料'}
           </p>
         ) : (
-          finalKeys.map((key) => (
-            <ETARow
-              key={key}
-              route={grouped.get(key)!.route}
-              bound={grouped.get(key)!.bound}
-              serviceType={grouped.get(key)!.serviceType}
-              boardingStopId={grouped.get(key)!.boardingStopId}
-              isSpecial={grouped.get(key)!.isSpecial}
-              etas={grouped.get(key)!.etas}
-              alightingStopIds={grouped.get(key)!.alightingStopIds}
-              destinationStopNames={destinationStopNames}
-              destinationStops={destinationStops}
-              onViewAlightingStop={setMapStop}
-              freshness={stopFreshness}
-              lastSuccessfulAt={stopLastSuccessfulAt}
-              etaLoading={stopETALoading}
-            />
-          ))
+          finalKeys.map((key) => {
+            const group = grouped.get(key)!;
+            const hasAnotherOccurrence = [...grouped.values()].some((other) => (
+              other.route === group.route && other.bound === group.bound
+              && other.serviceType === group.serviceType
+              && other.boardingStopId === group.boardingStopId
+              && other.boardingSeq !== group.boardingSeq
+            ));
+            return (
+              <ETARow
+                key={key}
+                route={group.route}
+                bound={group.bound}
+                serviceType={group.serviceType}
+                boardingStopId={group.boardingStopId}
+                boardingSeq={group.boardingSeq}
+                showBoardingSeq={hasAnotherOccurrence}
+                isSpecial={group.isSpecial}
+                etas={group.etas}
+                alightingStopIds={group.alightingStopIds}
+                destinationStopNames={destinationStopNames}
+                destinationStops={destinationStops}
+                onViewAlightingStop={setMapStop}
+                freshness={stopFreshness}
+                lastSuccessfulAt={stopLastSuccessfulAt}
+                etaLoading={stopETALoading}
+              />
+            );
+          })
+        )}
+        {hiddenRouteCount > 0 && (
+          <button type="button" onClick={() => setExpandedRoutes(true)} className="w-full py-3 text-center text-sm font-semibold text-blue-700 hover:underline dark:text-blue-300">
+            {lang === 'en' ? `Show ${hiddenRouteCount} more routes` : `顯示其餘 ${hiddenRouteCount} 條路線`}
+          </button>
+        )}
+        {limitRoutes && expandedRoutes && rankedKeys.length > 5 && (
+          <button type="button" onClick={() => setExpandedRoutes(false)} className="w-full py-3 text-center text-sm font-semibold text-blue-700 hover:underline dark:text-blue-300">
+            {lang === 'en' ? 'Show fewer routes' : '收起路線'}
+          </button>
         )}
       </div>
     </article>

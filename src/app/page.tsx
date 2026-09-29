@@ -231,7 +231,7 @@ function BusCheckerApp() {
         ) : stopsError ? (
           <div className="flex flex-col items-center justify-center gap-3 py-32 text-center">
             <p className="text-xl font-semibold">{lang === 'en' ? 'Failed to load stops' : '無法載入巴士站'}</p>
-            <p className="max-w-xs text-sm text-[var(--muted)]">{stopsError}</p>
+            <p className="max-w-xs text-sm text-[var(--muted)]">{lang === 'en' ? 'Please try again later.' : '請稍後再試。'}</p>
           </div>
         ) : stops.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 py-32 text-center">
@@ -252,7 +252,7 @@ function BusCheckerApp() {
         ) : destinationActive && directRoutesError ? (
           <div className="flex flex-col items-center justify-center gap-3 py-32 text-center">
             <p className="text-xl font-semibold">{lang === 'en' ? 'Route search unavailable' : '暫時無法搜尋路線'}</p>
-            <p className="max-w-xs text-sm text-[var(--muted)]">{directRoutesError}</p>
+            <p className="max-w-xs text-sm text-[var(--muted)]">{lang === 'en' ? 'Please try again later.' : '請稍後再試。'}</p>
           </div>
         ) : visibleStops.length === 0 && destinationActive ? (
           <div className="flex flex-col items-center justify-center gap-3 py-32 text-center">

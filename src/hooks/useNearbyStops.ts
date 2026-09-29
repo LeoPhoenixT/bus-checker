@@ -50,8 +50,10 @@ export function useNearbyStops(
           setDestinationStops([]);
         }
       })
-      .catch((err: unknown) => {
-        if (active) setError(err instanceof Error ? err.message : 'Failed to load stops');
+      .catch((caught: unknown) => {
+        if (!active) return;
+        console.error('Nearby KMB stop request failed', caught);
+        setError('unavailable');
       })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };

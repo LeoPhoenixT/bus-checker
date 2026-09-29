@@ -8,12 +8,15 @@ import type { DestinationStopNames, ETAEntry, Stop } from '@/lib/types';
 import type { ETAFreshness } from '@/lib/etaFreshness';
 import { getETAAgeSeconds } from '@/lib/etaFreshness';
 import { getMinutesUntil } from '@/lib/etaTime';
+import { getNullETAMessage } from '@/lib/etaPresentation';
 
 interface ETARowProps {
   route: string;
   bound: 'I' | 'O';
   serviceType: string;
   boardingStopId: string;
+  boardingSeq: number;
+  showBoardingSeq?: boolean;
   isSpecial?: boolean;
   etas: ETAEntry[];
   alightingStopIds?: string[];
@@ -50,6 +53,8 @@ export function ETARow({
   bound,
   serviceType,
   boardingStopId,
+  boardingSeq,
+  showBoardingSeq = false,
   isSpecial = false,
   etas,
   alightingStopIds = [],
@@ -65,11 +70,11 @@ export function ETARow({
   const first = etas[0];
   const dest = first ? (lang === 'en' ? first.dest_en : first.dest_tc) : '';
   const destPrefix = lang === 'en' ? 'To ' : '往 ';
-  const routeDetailParams = new URLSearchParams({ bound, serviceType, stop: boardingStopId });
+  const routeDetailParams = new URLSearchParams({ bound, serviceType, stop: boardingStopId, seq: String(boardingSeq) });
   const routeDetailHref = `/routes/${encodeURIComponent(route)}?${routeDetailParams}`;
-  const routeDetailLabel = lang === 'en'
+  const routeDetailLabel = (lang === 'en'
     ? `View ${route}${isSpecial ? ' special service' : ''} route details`
-    : `查看${route}${isSpecial ? '特別班' : ''}路線詳情`;
+    : `查看${route}${isSpecial ? '特別班' : ''}路線詳情`) + (showBoardingSeq ? (lang === 'en' ? ` (stop ${boardingSeq})` : `（第 ${boardingSeq} 站）`) : '');
   const alightingStops = alightingStopIds.map((stopId) => ({
     id: stopId,
     name: destinationStopNames[stopId]?.[lang] ?? stopId,
@@ -78,16 +83,18 @@ export function ETARow({
 
   // Compute minutes for each upcoming bus; filter out clearly departed
   const times = etas
-    .map((e) => ({ eta: e.eta, minutes: e.eta ? getMinutesUntil(e.eta) : null, rmk_en: e.rmk_en, rmk_tc: e.rmk_tc }))
-    .filter((t) => t.minutes === null || t.minutes >= -1);
+    .filter((eta): eta is ETAEntry & { eta: string } => eta.eta !== null)
+    .map((eta) => ({ minutes: getMinutesUntil(eta.eta), rmk_en: eta.rmk_en, rmk_tc: eta.rmk_tc }))
+    .filter((time) => time.minutes >= -1);
+  const nullEtaMessage = getNullETAMessage(etas, lang);
 
   // Deduplicate by arrival time — keep only unique minutes
-  const seenMinutes = new Set<number | null>();
+  const seenMinutes = new Set<number>();
   const uniqueTimes = times.filter((t) => {
     if (seenMinutes.has(t.minutes)) return false;
     seenMinutes.add(t.minutes);
     return true;
-  });
+  }).slice(0, 3);
 
   const [nearest, ...later] = uniqueTimes;
 
@@ -127,11 +134,7 @@ export function ETARow({
       return <span className="text-xs font-medium text-[var(--muted)]">{lang === 'en' ? 'Unavailable' : '暫未能提供'}</span>;
     }
 
-    if (!nearest) return <span className="text-xs text-[var(--muted)]">—</span>;
-
-    if (nearest.minutes === null) {
-      return <span className="text-xs text-[var(--muted)]">—</span>;
-    }
+    if (!nearest) return null;
 
     if (nearest.minutes < 0) {
       return <span className="text-xs text-[var(--muted)] tabular-nums">{departed}</span>;
@@ -189,6 +192,7 @@ export function ETARow({
 
       {/* Destination with direction prefix */}
       <div className="min-w-0 flex-1">
+        {showBoardingSeq && <p className="text-xs text-[var(--muted)]">{lang === 'en' ? `Board at stop ${boardingSeq}` : `於第 ${boardingSeq} 站上車`}</p>}
         {first ? (
           <p className="truncate text-sm font-medium leading-tight text-[var(--foreground)]">
             <span className="text-[var(--muted)] font-normal">{destPrefix}</span>
@@ -196,6 +200,9 @@ export function ETARow({
           </p>
         ) : (
           <p className="text-sm text-[var(--muted)]">{lang === 'en' ? 'No live arrivals' : '暫無班次資料'}</p>
+        )}
+        {!hidesLiveETA && !(etaLoading && lastSuccessfulAt === null) && !nearest && nullEtaMessage && (
+          <p className="mt-0.5 text-xs text-[var(--muted)]">{nullEtaMessage}</p>
         )}
         {alightingStops.length > 0 && (
           <p className="mt-0.5 flex flex-wrap items-center gap-x-1 text-[11px] leading-snug text-blue-600 dark:text-blue-400">
@@ -238,8 +245,6 @@ export function ETARow({
           <p className="mt-0.5 flex flex-wrap gap-1.5">
             {later.map((t, i) => {
               const rmk = lang === 'en' ? t.rmk_en : t.rmk_tc;
-              if (t.minutes === null) return null;
-
               const timeText =
                 t.minutes < 0
                   ? departed

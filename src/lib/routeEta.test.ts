@@ -26,13 +26,13 @@ describe('filterRouteVariantETAs', () => {
       eta({ stop: 'STOPB' }),
       eta({ route: '87X' }),
       matchingFirst,
-    ], variant, 'stopa');
+    ], variant, 'stopa', 5);
     expect(results).toEqual([matchingFirst, matchingSecond]);
   });
 
   it('ignores malformed upstream records without crashing', () => {
     const malformed = eta({ stop: undefined as unknown as string });
-    expect(filterRouteVariantETAs([malformed, eta({})], variant, 'STOPA')).toHaveLength(1);
+    expect(filterRouteVariantETAs([malformed, eta({})], variant, 'STOPA', 5)).toHaveLength(1);
   });
 });
 
@@ -44,7 +44,7 @@ describe('filterFavouriteRouteStopETAs', () => {
       eta({ service_type: '1' }),
       eta({ stop: 'STOP2' }),
       eta({ route: '87X' }),
-    ], favourite);
+    ], favourite, 5);
     expect(result).toEqual([eta({})]);
   });
 });

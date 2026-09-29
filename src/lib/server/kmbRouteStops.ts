@@ -25,6 +25,8 @@ let pendingRefresh: PendingRefresh | null = null;
 let failedRefresh: FailedRefresh | null = null;
 
 export class KmbRouteStopsError extends Error {
+  retryAfterAt?: number;
+
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'KmbRouteStopsError';
@@ -127,11 +129,13 @@ export function fetchKmbRouteStops(now = new Date()): Promise<RouteStop[]> {
         ? error
         : new KmbRouteStopsError('Unable to refresh KMB route data', { cause: error });
       if (pendingRefresh === refresh) {
+        routeError.retryAfterAt = nowMs + REFRESH_FAILURE_BACKOFF_MS;
         failedRefresh = {
           serviceDay,
-          retryAfter: nowMs + REFRESH_FAILURE_BACKOFF_MS,
+          retryAfter: routeError.retryAfterAt,
           error: routeError,
         };
+        console.error('KMB route-stop refresh failed', routeError);
       }
       throw routeError;
     })

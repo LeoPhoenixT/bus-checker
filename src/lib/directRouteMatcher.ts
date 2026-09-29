@@ -16,9 +16,6 @@ function isBetterMatch(candidate: DirectRouteMatch, current: DirectRouteMatch): 
   if (candidate.alightingSeq !== current.alightingSeq) {
     return candidate.alightingSeq < current.alightingSeq;
   }
-  if (candidate.boardingSeq !== current.boardingSeq) {
-    return candidate.boardingSeq > current.boardingSeq;
-  }
   return candidate.alightingStop < current.alightingStop;
 }
 
@@ -51,10 +48,11 @@ export function matchDirectRoutes(
 
   const result: DirectRouteMatchesByOriginStop = {};
   for (const origin of origins) {
-    const bestByVariant = new Map<string, DirectRouteMatch>();
+    const bestByBoarding = new Map<string, DirectRouteMatch>();
 
     for (const boarding of occurrencesByStop.get(origin) ?? []) {
       const key = variantKey(boarding);
+      const boardingKey = `${key}|${boarding.seq}`;
       for (const alighting of destinationOccurrencesByVariant.get(key) ?? []) {
         if (boarding.seq >= alighting.seq) continue;
         if (normalize(boarding.stop) === normalize(alighting.stop)) continue;
@@ -68,15 +66,15 @@ export function matchDirectRoutes(
           alightingStop: normalize(alighting.stop),
           alightingSeq: alighting.seq,
         };
-        const current = bestByVariant.get(key);
-        if (!current || isBetterMatch(candidate, current)) bestByVariant.set(key, candidate);
+        const current = bestByBoarding.get(boardingKey);
+        if (!current || isBetterMatch(candidate, current)) bestByBoarding.set(boardingKey, candidate);
       }
     }
 
-    const matches = [...bestByVariant.values()].sort((a, b) =>
+    const matches = [...bestByBoarding.values()].sort((a, b) =>
       a.route.localeCompare(b.route) ||
       a.bound.localeCompare(b.bound) ||
-      a.serviceType.localeCompare(b.serviceType),
+      a.serviceType.localeCompare(b.serviceType) || a.boardingSeq - b.boardingSeq,
     );
     if (matches.length > 0) result[origin] = matches;
   }

@@ -1,20 +1,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const getKmbRouteDetailMock = vi.hoisted(() => vi.fn());
+const getKmbRetryAfterSecondsMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/server/kmbRoutes', () => ({
   KmbRoutesError: class KmbRoutesError extends Error {},
   KmbRouteStopsError: class KmbRouteStopsError extends Error {},
   getKmbRouteDetail: getKmbRouteDetailMock,
+  getKmbRetryAfterSeconds: getKmbRetryAfterSecondsMock,
 }));
 
+import { KmbRoutesError } from '@/lib/server/kmbRoutes';
 import { GET } from './route';
 
 function context(route: string) {
   return { params: Promise.resolve({ route }) };
 }
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => vi.resetAllMocks());
 
 describe('GET /api/routes/[route]', () => {
   it('validates the exact route variant identity', async () => {
@@ -34,5 +37,16 @@ describe('GET /api/routes/[route]', () => {
     getKmbRouteDetailMock.mockResolvedValue(null);
     const response = await GET(new Request('http://localhost/api/routes/87D?bound=O&serviceType=1'), context('87D'));
     expect(response.status).toBe(404);
+  });
+
+  it('keeps upstream details out of the UI response and supplies the retry time', async () => {
+    getKmbRouteDetailMock.mockRejectedValue(new KmbRoutesError('KMB stop service returned HTTP 403'));
+    getKmbRetryAfterSecondsMock.mockReturnValue(42);
+
+    const response = await GET(new Request('http://localhost/api/routes/87D?bound=I&serviceType=1'), context('87D'));
+    expect(response.status).toBe(503);
+    expect(response.headers.get('Retry-After')).toBe('42');
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(await response.json()).toEqual({ error: 'KMB route data is temporarily unavailable' });
   });
 });

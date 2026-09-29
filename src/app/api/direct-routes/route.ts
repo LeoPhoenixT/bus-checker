@@ -49,6 +49,7 @@ export async function POST(request: Request) {
     if (error instanceof KmbRouteStopsError) {
       return NextResponse.json({ error: 'KMB route data is temporarily unavailable' }, { status: 503 });
     }
+    console.error('Unexpected direct-route request failure', error);
     return NextResponse.json({ error: 'Failed to match direct routes' }, { status: 500 });
   }
 }

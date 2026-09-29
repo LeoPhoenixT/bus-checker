@@ -32,6 +32,8 @@ let failedRoutes: FailedRefresh | null = null;
 let failedStops: FailedRefresh | null = null;
 
 export class KmbRoutesError extends Error {
+  retryAfterAt?: number;
+
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'KmbRoutesError';
@@ -44,6 +46,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+export function getKmbRetryAfterSeconds(error: KmbRoutesError | KmbRouteStopsError): number | null {
+  if (error.retryAfterAt === undefined) return null;
+  const remaining = error.retryAfterAt - Date.now();
+  return remaining > 0 ? Math.ceil(remaining / 1000) : null;
+}
+
+function coordinate(value: unknown): number {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string' && value.trim() !== '') return Number(value);
+  return NaN;
 }
 
 function normalizeRouteVariant(value: unknown): RouteVariant | null {
@@ -75,8 +89,8 @@ function normalizeStop(value: unknown): Stop | null {
   const nameEn = text(value.name_en);
   const nameTc = text(value.name_tc);
   const nameSc = text(value.name_sc);
-  const lat = Number(value.lat);
-  const long = Number(value.long);
+  const lat = coordinate(value.lat);
+  const long = coordinate(value.long);
   const timestamp = text(value.data_timestamp);
   if (!stop || (!nameEn && !nameTc) || !Number.isFinite(lat) || !Number.isFinite(long)) return null;
   return { stop, name_en: nameEn, name_tc: nameTc, name_sc: nameSc, lat, long, data_timestamp: timestamp };
@@ -142,7 +156,9 @@ function fetchCached<T>(
         : new KmbRoutesError('Unable to refresh KMB route data', { cause: error });
       const activePending = getPending();
       if (activePending?.serviceDay === serviceDay && activePending.promise === refresh.promise) {
-        setFailed({ serviceDay, retryAfter: now + REFRESH_FAILURE_BACKOFF_MS, error: routeError });
+        routeError.retryAfterAt = now + REFRESH_FAILURE_BACKOFF_MS;
+        setFailed({ serviceDay, retryAfter: routeError.retryAfterAt, error: routeError });
+        console.error('KMB route or stop metadata refresh failed', routeError);
       }
       throw routeError;
     })
@@ -253,7 +269,11 @@ export async function getKmbFavouriteRouteStopMetadata(
     const favourite = favourites[index];
     if (result.status !== 'fulfilled') return { favourite, status: 'unavailable' };
     if (result.value === null) return { favourite, status: 'missing' };
-    const stop = result.value.stops.find((item) => item.stopId === favourite.stopId);
+    const occurrences = result.value.stops.filter((item) => item.stopId === favourite.stopId);
+    if (favourite.boardingSeq === undefined && occurrences.length > 1) return { favourite, status: 'ambiguous', variant: result.value.variant };
+    const stop = favourite.boardingSeq === undefined
+      ? occurrences[0]
+      : occurrences.find((item) => item.seq === favourite.boardingSeq);
     if (!stop) return { favourite, status: 'missing' };
     return { favourite, status: 'resolved', variant: result.value.variant, stop };
   });

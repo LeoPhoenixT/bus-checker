@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from './route';
 
 function context(stopId: string) {
@@ -6,14 +6,30 @@ function context(stopId: string) {
 }
 
 afterEach(() => vi.restoreAllMocks());
+beforeEach(() => { vi.spyOn(console, 'error').mockImplementation(() => {}); });
 
 describe('GET /api/stop-eta/[stopId]', () => {
+  it.each([undefined, null, 0, -1, 1.5, '1'])('rejects an invalid or missing occurrence sequence: %j', async (seq) => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ data: [{ route: '10', dir: 'O', service_type: '1', seq, eta_seq: 1, eta: null }] }));
+    const response = await GET(new Request('http://localhost/api/stop-eta/ABCDEFGH'), context('ABCDEFGH'));
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: 'Invalid KMB ETA response' });
+    expect(console.error).toHaveBeenCalledWith('KMB ETA payload validation failed', { stopId: 'ABCDEFGH' });
+  });
+
+  it('handles invalid JSON as a generic 502 and logs the parsing failure', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('not-json', { status: 200 }));
+    const response = await GET(new Request('http://localhost/api/stop-eta/ABCDEFGH'), context('ABCDEFGH'));
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: 'Invalid KMB ETA response' });
+    expect(console.error).toHaveBeenCalledWith('KMB ETA JSON parsing failed', expect.objectContaining({ stopId: 'ABCDEFGH', error: expect.any(Error) }));
+  });
   it('restores the endpoint stop ID only when a valid KMB ETA row omits it', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       type: 'ETA',
       data: [
-        { route: '87D', dir: 'O', service_type: '1', eta_seq: 1, eta: '2026-09-11T16:35:00+08:00' },
-        { route: '87D', dir: 'O', service_type: '1', stop: 'OTHER_STOP', eta_seq: 2, eta: '2026-09-11T16:45:00+08:00' },
+        { route: '87D', dir: 'O', service_type: '1', seq: 1, eta_seq: 1, eta: '2026-09-11T16:35:00+08:00' },
+        { route: '87D', dir: 'O', service_type: '1', stop: 'OTHER_STOP', seq: 1, eta_seq: 2, eta: '2026-09-11T16:45:00+08:00' },
       ],
     }), { status: 200 }));
 

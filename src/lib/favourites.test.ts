@@ -11,6 +11,13 @@ import type { FavouriteRouteStop } from './types';
 const favourite = { route: ' 87d ', bound: 'o', serviceType: '03', stopId: ' stop-1 ' } as unknown as FavouriteRouteStop;
 
 describe('route-stop favourite identity', () => {
+  it('preserves old v2 entries and distinct sequence-specific favourites together', () => {
+    const legacy = normalizeFavouriteRouteStop(favourite)!;
+    const items = [legacy, { ...legacy, boardingSeq: 2 }, { ...legacy, boardingSeq: 23 }];
+    expect(parseStoredFavourites(serializeFavourites(items))).toEqual(items);
+    expect(new Set(items.map(favouriteRouteStopKey)).size).toBe(3);
+    expect(normalizeFavouriteRouteStop({ ...legacy, boardingSeq: 0 })).toBeNull();
+  });
   it('normalizes and keys every field needed to identify a boarding point', () => {
     const normalized = normalizeFavouriteRouteStop(favourite);
     expect(normalized).toEqual({ route: '87D', bound: 'O', serviceType: '3', stopId: 'STOP-1' });
