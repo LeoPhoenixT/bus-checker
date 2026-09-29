@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isValidRouteQuery, isValidServiceType, normalizeRouteQuery } from '@/lib/routeVariants';
-import { getKmbRouteDetail, KmbRoutesError, KmbRouteStopsError } from '@/lib/server/kmbRoutes';
+import { getKmbRetryAfterSeconds, getKmbRouteDetail, KmbRoutesError, KmbRouteStopsError } from '@/lib/server/kmbRoutes';
 
 function firstSearchParam(value: string | null): string {
   return value?.trim().toUpperCase() ?? '';
@@ -27,8 +27,13 @@ export async function GET(
     });
   } catch (error) {
     if (error instanceof KmbRoutesError || error instanceof KmbRouteStopsError) {
-      return NextResponse.json({ error: 'KMB route data is temporarily unavailable' }, { status: 503 });
+      const retryAfter = getKmbRetryAfterSeconds(error);
+      return NextResponse.json({ error: 'KMB route data is temporarily unavailable' }, {
+        status: 503,
+        headers: { 'Cache-Control': 'no-store', ...(retryAfter === null ? {} : { 'Retry-After': String(retryAfter) }) },
+      });
     }
-    return NextResponse.json({ error: 'Failed to load route detail' }, { status: 500 });
+    console.error('Unexpected route detail request failure', { route, bound, serviceType, error });
+    return NextResponse.json({ error: 'Failed to load route detail' }, { status: 500, headers: { 'Cache-Control': 'no-store' } });
   }
 }

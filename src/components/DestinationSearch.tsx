@@ -20,6 +20,7 @@ export function DestinationSearch({ onSelectStop, onSelectAddress, initialQuery 
   const [query, setQuery] = useState(initialQuery);
   const [open, setOpen] = useState(false);
   const [stops, setStops] = useState<Stop[]>([]);
+  const [stopUnavailable, setStopUnavailable] = useState(false);
   const [addresses, setAddresses] = useState<AddressSearchResult[]>([]);
   const [addressLoading, setAddressLoading] = useState(false);
   const [addressError, setAddressError] = useState<string | null>(null);
@@ -28,7 +29,13 @@ export function DestinationSearch({ onSelectStop, onSelectAddress, initialQuery 
 
   useEffect(() => {
     let active = true;
-    void getCachedStops().then((items) => { if (active) setStops(items); }).catch(() => { if (active) setStops([]); });
+    setStops([]);
+    setStopUnavailable(false);
+    void getCachedStops().then((items) => { if (active) setStops(items); }).catch((error: unknown) => {
+      if (!active) return;
+      console.error('Destination KMB stop request failed', error);
+      setStopUnavailable(true);
+    });
     return () => { active = false; };
   }, [serviceDay]);
 
@@ -103,7 +110,7 @@ export function DestinationSearch({ onSelectStop, onSelectAddress, initialQuery 
           role="combobox"
           aria-expanded={hasQuery && open}
           aria-controls="destination-search-results"
-          className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-500"
+          className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] py-2 pl-9 pr-3 text-sm placeholder:text-[var(--muted)] outline-none focus:border-blue-500"
         />
       </div>
 
@@ -116,7 +123,9 @@ export function DestinationSearch({ onSelectStop, onSelectAddress, initialQuery 
           <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
             {lang === 'en' ? 'Bus stops' : '巴士站'}
           </p>
-          {stopResults.length > 0 ? stopResults.map((stop) => (
+          {stopUnavailable ? (
+            <p className="px-3 py-2 text-xs text-[var(--muted)]">{lang === 'en' ? 'Bus stop search is temporarily unavailable.' : '暫時無法搜尋巴士站。'}</p>
+          ) : stopResults.length > 0 ? stopResults.map((stop) => (
             <button
               type="button"
               role="option"

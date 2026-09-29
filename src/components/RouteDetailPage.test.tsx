@@ -4,6 +4,7 @@ import { LanguageProvider } from '@/contexts/LanguageContext';
 import { FavouriteProvider } from '@/contexts/FavouriteContext';
 import { FAVOURITES_STORAGE_KEY } from '@/lib/favourites';
 import { ThemeProvider } from '@/contexts/ThemeContext';
+import { RouteDetailRequestError } from '@/lib/kmb';
 import { RouteDetailPage } from './RouteDetailPage';
 import type { ETAEntry, RouteDetail, RouteVariant } from '@/lib/types';
 
@@ -14,6 +15,16 @@ let pathname = '/routes/87D';
 vi.mock('@/lib/kmb', () => ({
   fetchRouteDetail: fetchRouteDetailMock,
   fetchStopETAs: fetchStopETAsMock,
+  RouteDetailRequestError: class RouteDetailRequestError extends Error {
+    constructor(readonly status: number, readonly retryAfterSeconds: number | null) {
+      super(`Failed to fetch route detail: ${status}`);
+    }
+  },
+}));
+vi.mock('./RouteMap', () => ({
+  RouteMap: ({ onSelectStop }: { onSelectStop: (stop: { stopId: string; seq: number }) => void }) => (
+    <button type="button" onClick={() => onSelectStop({ stopId: 'STOP2', seq: 2 })}>Select stop on map</button>
+  ),
 }));
 vi.mock('next/navigation', () => ({ usePathname: () => pathname }));
 vi.mock('next/link', () => ({
@@ -63,6 +74,7 @@ function renderPage() {
 
 beforeEach(() => {
   pathname = '/routes/87D';
+  vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.setSystemTime(new Date('2026-09-11T12:00:00.000Z'));
 });
@@ -70,10 +82,40 @@ afterEach(() => {
   cleanup();
   localStorage.clear();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
 describe('RouteDetailPage', () => {
+  it('does not guess an occurrence for a legacy deep link and selects only the clicked row', async () => {
+    const repeated = detail();
+    repeated.stops.push({ ...repeated.stops[0], seq: 3, nameTc: '第一站回程' });
+    fetchRouteDetailMock.mockResolvedValue(repeated);
+    fetchStopETAsMock.mockResolvedValue(response([eta(), eta({ seq: 3, eta_seq: 2, eta: '2026-09-11T12:08:00.000Z' })]));
+    render(<ThemeProvider><FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="STOP1" /></LanguageProvider></FavouriteProvider></ThemeProvider>);
+    await waitFor(() => expect(screen.getByText('此站在路線中出現多次，請選擇你要上車的站序。')).toBeDefined());
+    expect(fetchStopETAsMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /第一站回程/ }));
+    await waitFor(() => expect(screen.getByText('7 分')).toBeDefined());
+    expect(screen.queryByText('2 分')).toBeNull();
+    expect(screen.getByText('第一站').closest('button')?.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: '加入收藏' }));
+    expect(JSON.parse(localStorage.getItem(FAVOURITES_STORAGE_KEY)!).items).toEqual([{ route: '87D', bound: 'O', serviceType: '3', stopId: 'STOP1', boardingSeq: 3 }]);
+  });
+
+  it('uses a valid sequence deep link and ignores a mismatched sequence', async () => {
+    const repeated = detail();
+    repeated.stops.push({ ...repeated.stops[0], seq: 3, nameTc: '第一站回程' });
+    fetchRouteDetailMock.mockResolvedValue(repeated);
+    fetchStopETAsMock.mockResolvedValue(response([]));
+    const { rerender } = render(<ThemeProvider><FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="STOP1" initialStopSeq={3} /></LanguageProvider></FavouriteProvider></ThemeProvider>);
+    await waitFor(() => expect(screen.getByRole('button', { name: /第一站回程/ }).getAttribute('aria-expanded')).toBe('true'));
+    expect(screen.getByText('第一站').closest('button')?.getAttribute('aria-expanded')).toBe('false');
+    fetchStopETAsMock.mockClear();
+    rerender(<ThemeProvider><FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="STOP1" initialStopSeq={99} /></LanguageProvider></FavouriteProvider></ThemeProvider>);
+    await waitFor(() => expect(screen.getByRole('button', { name: /第一站回程/ }).getAttribute('aria-expanded')).toBe('false'));
+    expect(fetchStopETAsMock.mock.calls.every(([, options]) => options.signal.aborted)).toBe(true);
+  });
   it('loads topology without ETA, then fetches and renders only the selected exact variant', async () => {
     fetchRouteDetailMock.mockResolvedValue(detail());
     fetchStopETAsMock.mockResolvedValue(response([
@@ -118,6 +160,29 @@ describe('RouteDetailPage', () => {
     expect(screen.getByRole('button', { name: /第二站/ }).getAttribute('aria-expanded')).toBe('true');
   });
 
+  it('selects a stop from the route map and loads its ETA', async () => {
+    const scrollIntoView = vi.fn();
+    const previousScrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView');
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+    try {
+      fetchRouteDetailMock.mockResolvedValue(detail());
+      fetchStopETAsMock.mockResolvedValue(response([]));
+      renderPage();
+
+      await waitFor(() => expect(screen.getByText('第二站')).toBeDefined());
+      fireEvent.click(screen.getByRole('button', { name: 'Select stop on map' }));
+      expect(screen.getByRole('button', { name: /第二站/ }).getAttribute('aria-expanded')).toBe('true');
+      await waitFor(() => expect(fetchStopETAsMock).toHaveBeenCalledWith('STOP2', expect.objectContaining({ signal: expect.anything() })));
+      expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Select stop on map' }));
+      expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    } finally {
+      if (previousScrollIntoView) Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', previousScrollIntoView);
+      else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+    }
+  });
+
   it('silently ignores a stale or invalid nearby stop deep link without preloading ETA', async () => {
     fetchRouteDetailMock.mockResolvedValue(detail());
     render(
@@ -155,13 +220,20 @@ describe('RouteDetailPage', () => {
 
   it('retries a temporarily unavailable topology response and preserves the search query in links', async () => {
     fetchRouteDetailMock
-      .mockRejectedValueOnce(new Error('Failed to fetch route detail: 503'))
+      .mockRejectedValueOnce(new RouteDetailRequestError(503, 3))
       .mockResolvedValueOnce(detail());
     render(
       <ThemeProvider><FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" searchQuery="87" /></LanguageProvider></FavouriteProvider></ThemeProvider>,
     );
     await waitFor(() => expect(screen.getByText('暫時無法載入路線資料')).toBeDefined());
     expect(screen.getByRole('link', { name: '返回路線搜尋' }).getAttribute('href')).toBe('/routes?q=87');
+    expect(screen.queryByText('Failed to fetch route detail: 503')).toBeNull();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '3 秒後重試' }).disabled).toBe(true);
+    expect(console.error).toHaveBeenCalledWith('Route detail request failed', expect.objectContaining({ route: '87D', bound: 'O', serviceType: '3' }));
+    fireEvent.click(screen.getByRole('button', { name: '3 秒後重試' }));
+    expect(fetchRouteDetailMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
     fireEvent.click(screen.getByRole('button', { name: '重試' }));
     await waitFor(() => expect(screen.getByText('第一站')).toBeDefined());
     expect(fetchRouteDetailMock).toHaveBeenCalledTimes(2);
@@ -184,6 +256,16 @@ describe('RouteDetailPage', () => {
     expect(screen.getByText('暫未能提供到站時間')).toBeDefined();
   });
 
+  it('shows a KMB remark instead of a dash when the selected stop has only null ETAs', async () => {
+    fetchRouteDetailMock.mockResolvedValue(detail());
+    fetchStopETAsMock.mockResolvedValue(response([eta({ eta: null, rmk_tc: '班次暫停' })]));
+    renderPage();
+    await waitFor(() => expect(screen.getByText('第一站')).toBeDefined());
+    fireEvent.click(screen.getByRole('button', { name: /第一站/ }));
+    await waitFor(() => expect(screen.getByText('班次暫停')).toBeDefined());
+    expect(screen.queryByText('—')).toBeNull();
+  });
+
   it('offers a route-stop favourite action only after a valid topology stop is selected', async () => {
     fetchRouteDetailMock.mockResolvedValue(detail());
     fetchStopETAsMock.mockResolvedValue(response([eta()]));
@@ -195,7 +277,7 @@ describe('RouteDetailPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '加入收藏' }));
     await waitFor(() => expect(screen.getByRole('button', { name: '移除收藏' })).toBeDefined());
     expect(JSON.parse(localStorage.getItem(FAVOURITES_STORAGE_KEY)!).items).toEqual([
-      { route: '87D', bound: 'O', serviceType: '3', stopId: 'STOP1' },
+      { route: '87D', bound: 'O', serviceType: '3', stopId: 'STOP1', boardingSeq: 1 },
     ]);
   });
 });

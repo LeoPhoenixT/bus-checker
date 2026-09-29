@@ -53,6 +53,13 @@ function renderCard(
 }
 
 describe('StopCard destination eligibility', () => {
+  it('shows separate boarding passes with links and alighting points for each sequence', () => {
+    renderCard([eta({ seq: 5 }), eta({ seq: 23 })], [match, { ...match, boardingSeq: 23, alightingStop: 'DEST0002', alightingSeq: 30 }]);
+    expect(screen.getByText('於第 5 站上車')).toBeDefined();
+    expect(screen.getByText('於第 23 站上車')).toBeDefined();
+    const links = screen.getAllByRole('link', { name: /查看88X路線詳情/ });
+    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/routes/88X?bound=O&serviceType=1&stop=ORIGIN01&seq=5', '/routes/88X?bound=O&serviceType=1&stop=ORIGIN01&seq=23']);
+  });
   it('shows only ETA entries belonging to an exact eligible variant', () => {
     renderCard([
       eta({ route: 'WRONG' }),
@@ -87,11 +94,11 @@ describe('StopCard destination eligibility', () => {
     expect(screen.getByText('第二站')).toBeDefined();
     expect(screen.getAllByText('特別班')).toHaveLength(2);
     expect(screen.getByRole('link', { name: '查看88X路線詳情' }).getAttribute('href'))
-      .toBe('/routes/88X?bound=O&serviceType=1&stop=ORIGIN01');
+      .toBe('/routes/88X?bound=O&serviceType=1&stop=ORIGIN01&seq=5');
     expect(screen.getAllByRole('link', { name: '查看88X特別班路線詳情' }).map((link) => link.getAttribute('href')))
       .toEqual([
-        '/routes/88X?bound=O&serviceType=2&stop=ORIGIN01',
-        '/routes/88X?bound=O&serviceType=3&stop=ORIGIN01',
+        '/routes/88X?bound=O&serviceType=2&stop=ORIGIN01&seq=5',
+        '/routes/88X?bound=O&serviceType=3&stop=ORIGIN01&seq=5',
       ]);
   });
 
@@ -102,8 +109,8 @@ describe('StopCard destination eligibility', () => {
     ], undefined);
     const links = screen.getAllByRole('link', { name: '查看88X路線詳情' });
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      '/routes/88X?bound=O&serviceType=1&stop=ORIGIN01',
-      '/routes/88X?bound=O&serviceType=1&stop=ORIGIN02',
+      '/routes/88X?bound=O&serviceType=1&stop=ORIGIN01&seq=5',
+      '/routes/88X?bound=O&serviceType=1&stop=ORIGIN02&seq=5',
     ]);
   });
 
@@ -118,6 +125,46 @@ describe('StopCard destination eligibility', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '在地圖上查看目的地站' }));
     expect(screen.getByRole('dialog').textContent).toBe('目的地站');
+  });
+});
+
+describe('StopCard route list', () => {
+  const manyEtas = () => Array.from({ length: 7 }, (_, index) => eta({
+    route: `R${index + 1}`,
+    eta: index === 0 ? null : new Date(Date.now() + (index === 1 ? 20 : index) * 60_000).toISOString(),
+  }));
+
+  it('shows five routes with the earliest valid ETAs first and lets riders reveal the rest', () => {
+    renderCard(manyEtas(), undefined);
+    expect(screen.getAllByRole('link', { name: /查看R[0-9]路線詳情/ }).map((link) => link.textContent)).toEqual(['R3', 'R4', 'R5', 'R6', 'R7']);
+    expect(screen.getByRole('button', { name: '顯示其餘 2 條路線' })).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: '顯示其餘 2 條路線' }));
+    expect(screen.getAllByRole('link', { name: /查看R[0-9]路線詳情/ })).toHaveLength(7);
+    fireEvent.click(screen.getByRole('button', { name: '收起路線' }));
+    expect(screen.getAllByRole('link', { name: /查看R[0-9]路線詳情/ })).toHaveLength(5);
+  });
+
+  it('keeps all matches visible when a route filter or destination is active', () => {
+    const { unmount } = renderCard(manyEtas(), undefined, {}, { routeFilters: ['R'] });
+    expect(screen.getAllByRole('link', { name: /查看R[0-9]路線詳情/ })).toHaveLength(7);
+    expect(screen.queryByRole('button', { name: /顯示其餘/ })).toBeNull();
+    unmount();
+
+    const matches = Array.from({ length: 7 }, (_, index) => ({ ...match, route: `R${index + 1}` }));
+    renderCard([], matches);
+    expect(screen.getAllByRole('link', { name: /查看R[0-9]路線詳情/ })).toHaveLength(7);
+    expect(screen.queryByRole('button', { name: /顯示其餘/ })).toBeNull();
+  });
+
+  it('does not discard a timed arrival after three null ETA rows', () => {
+    renderCard([
+      eta({ eta_seq: 1, eta: null, rmk_tc: '班次暫停' }),
+      eta({ eta_seq: 2, eta: null, rmk_tc: '班次暫停' }),
+      eta({ eta_seq: 3, eta: null, rmk_tc: '班次暫停' }),
+      eta({ eta_seq: 4, eta: new Date(Date.now() + 600_000).toISOString() }),
+    ], undefined);
+    expect(screen.getByText(/^[0-9]+ 分$/)).toBeDefined();
+    expect(screen.queryByText('班次暫停')).toBeNull();
   });
 });
 

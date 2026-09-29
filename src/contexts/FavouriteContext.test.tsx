@@ -11,6 +11,7 @@ function Probe() {
   return <>
     <span>{hydrated ? 'hydrated' : 'loading'}</span><span>{favourites.length}</span>
     <button onClick={() => toggleFavourite(favourite)}>toggle</button>
+    <button onClick={() => toggleFavourite({ ...favourite, boardingSeq: 3 })}>choose occurrence</button>
     <button onClick={() => { toggleFavourite(favourite); toggleFavourite(otherFavourite); }}>add two</button>
     <button onClick={() => { removeFavourite(favourite); toggleFavourite(otherFavourite); }}>remove and toggle</button>
   </>;
@@ -20,6 +21,14 @@ beforeEach(() => localStorage.clear());
 afterEach(() => { cleanup(); localStorage.clear(); });
 
 describe('FavouriteProvider', () => {
+  it('upgrades a legacy entry only when the user explicitly chooses an occurrence', async () => {
+    localStorage.setItem(FAVOURITES_STORAGE_KEY, serializeFavourites([favourite, otherFavourite]));
+    render(<FavouriteProvider><Probe /></FavouriteProvider>);
+    await waitFor(() => expect(screen.getByText('hydrated')).toBeDefined());
+    expect(JSON.parse(localStorage.getItem(FAVOURITES_STORAGE_KEY)!).items).toEqual([favourite, otherFavourite]);
+    fireEvent.click(screen.getByRole('button', { name: 'choose occurrence' }));
+    expect(JSON.parse(localStorage.getItem(FAVOURITES_STORAGE_KEY)!).items).toEqual([otherFavourite, { ...favourite, boardingSeq: 3 }]);
+  });
   it('clears legacy route-only data and hydrates a deduplicated v2 store', async () => {
     localStorage.setItem(LEGACY_FAVOURITES_STORAGE_KEY, JSON.stringify(['87D']));
     localStorage.setItem(FAVOURITES_STORAGE_KEY, serializeFavourites([favourite, favourite]));

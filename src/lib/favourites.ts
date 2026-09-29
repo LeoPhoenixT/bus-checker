@@ -17,11 +17,13 @@ export function normalizeFavouriteRouteStop(value: FavouriteRouteStop): Favourit
   const serviceType = isValidServiceType(rawServiceType) ? String(Number.parseInt(rawServiceType, 10)) : '';
   const stopId = String(value.stopId ?? '').trim().toUpperCase();
   if (!isValidRouteQuery(route) || (bound !== 'I' && bound !== 'O') || !isValidServiceType(serviceType) || !stopId) return null;
-  return { route, bound, serviceType, stopId } as FavouriteRouteStop;
+  const boardingSeq = value.boardingSeq;
+  if (boardingSeq !== undefined && (!Number.isSafeInteger(boardingSeq) || boardingSeq <= 0)) return null;
+  return { route, bound, serviceType, stopId, ...(boardingSeq === undefined ? {} : { boardingSeq }) } as FavouriteRouteStop;
 }
 
 export function favouriteRouteStopKey(value: FavouriteRouteStop): string {
-  return `${value.route}|${value.bound}|${value.serviceType}|${value.stopId}`;
+  return `${value.route}|${value.bound}|${value.serviceType}|${value.stopId}${value.boardingSeq === undefined ? '' : `|${value.boardingSeq}`}`;
 }
 
 export function dedupeFavouriteRouteStops(values: FavouriteRouteStop[]): FavouriteRouteStop[] {

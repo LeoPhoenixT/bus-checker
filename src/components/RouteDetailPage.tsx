@@ -1,20 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Bus, ChevronDown, ChevronUp, Heart, RefreshCw, Route as RouteIcon } from 'lucide-react';
 import clsx from 'clsx';
 import { useLang } from '@/contexts/LanguageContext';
 import { useFavourites } from '@/contexts/FavouriteContext';
 import { useStopETAs } from '@/hooks/useStopETAs';
-import { fetchRouteDetail } from '@/lib/kmb';
+import { fetchRouteDetail, RouteDetailRequestError } from '@/lib/kmb';
 import { getETAAgeSeconds } from '@/lib/etaFreshness';
 import { filterRouteVariantETAs } from '@/lib/routeEta';
 import { getMinutesUntil } from '@/lib/etaTime';
-import type { ETAEntry, FavouriteRouteStop, RouteDetail, RouteDetailStop, RouteVariant } from '@/lib/types';
+import { getNullETAMessage } from '@/lib/etaPresentation';
+import type { ETAEntry, FavouriteRouteStop, RouteDetail, RouteDetailStop, RouteStopOccurrence, RouteVariant } from '@/lib/types';
+import { routeStopOccurrenceKey } from '@/lib/routeStopOccurrence';
 import { LanguageToggle } from './LanguageToggle';
 import { PrimaryNavigation } from './PrimaryNavigation';
 import { RefreshIndicator } from './RefreshIndicator';
+import { RouteMap } from './RouteMap';
 import { ThemeToggle } from './ThemeToggle';
 
 interface RouteDetailPageProps {
@@ -24,6 +27,7 @@ interface RouteDetailPageProps {
   searchQuery?: string;
   /** A nearby-result deep link may preselect an exact boarding stop. */
   initialStopId?: string;
+  initialStopSeq?: number;
 }
 
 function routeDetailHref(variant: RouteVariant, searchQuery?: string): string {
@@ -76,14 +80,16 @@ function SelectedStopETA({
     bound: detail.variant.bound,
     serviceType: detail.variant.serviceType,
     stopId: stop.stopId,
+    boardingSeq: stop.seq,
   };
   const saved = isFavourite(favourite);
-  const liveETAs = filterRouteVariantETAs(etas, detail.variant, stop.stopId);
+  const liveETAs = filterRouteVariantETAs(etas, detail.variant, stop.stopId, stop.seq);
   const shouldHideTimes = freshness === 'very-stale' || freshness === 'unavailable';
+  const nullEtaMessage = getNullETAMessage(liveETAs, lang);
   const arrivals = liveETAs
     .map((eta) => ({ eta, minutes: eta.eta ? getMinutesUntil(eta.eta) : null }))
-    .filter((item) => item.minutes === null || item.minutes >= -1)
-    .filter((item, index, all) => item.minutes === null || all.findIndex((candidate) => candidate.minutes === item.minutes) === index)
+    .filter((item): item is { eta: ETAEntry; minutes: number } => item.minutes !== null && item.minutes >= -1)
+    .filter((item, index, all) => all.findIndex((candidate) => candidate.minutes === item.minutes) === index)
     .slice(0, 3);
   const updated = ageLabel(lastSuccessfulAt, lang);
   const status = loading && lastSuccessfulAt === null
@@ -110,7 +116,7 @@ function SelectedStopETA({
       ) : shouldHideTimes ? (
         <p className="mt-2 text-sm font-medium text-[var(--muted)]">{lang === 'en' ? 'No live arrival time' : '暫未能提供即時到站時間'}</p>
       ) : arrivals.length === 0 ? (
-        <p className="mt-2 text-sm text-[var(--muted)]">{lang === 'en' ? 'No arrivals available' : '暫無班次資料'}</p>
+        <p className="mt-2 text-sm text-[var(--muted)]">{nullEtaMessage ?? (lang === 'en' ? 'No arrivals available' : '暫無班次資料')}</p>
       ) : (
         <div className="mt-3 flex flex-wrap gap-2">
           {arrivals.map(({ eta, minutes }, index) => (
@@ -123,7 +129,7 @@ function SelectedStopETA({
                   : 'border-blue-500/25 bg-[var(--card-bg)] text-blue-700 dark:text-blue-300',
               )}
             >
-              {minutes === null ? '—' : minutes <= 0 ? (lang === 'en' ? 'Arriving' : '即將到達') : `${minutes} ${lang === 'en' ? 'min' : '分'}`}
+              {minutes <= 0 ? (lang === 'en' ? 'Arriving' : '即將到達') : `${minutes} ${lang === 'en' ? 'min' : '分'}`}
             </span>
           ))}
         </div>
@@ -149,18 +155,46 @@ function SelectedStopETA({
   );
 }
 
-export function RouteDetailPage({ route, bound, serviceType, searchQuery, initialStopId }: RouteDetailPageProps) {
+export function RouteDetailPage({ route, bound, serviceType, searchQuery, initialStopId, initialStopSeq }: RouteDetailPageProps) {
   const { lang } = useLang();
   const [detail, setDetail] = useState<RouteDetail | null>(null);
   const [error, setError] = useState<'not-found' | 'unavailable' | null>(null);
-  const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
+  const [selectedStopKey, setSelectedStopKey] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [retryAfterAt, setRetryAfterAt] = useState<number | null>(null);
+  const [clockMs, setClockMs] = useState(() => Date.now());
+  const selectedStopRowRef = useRef<HTMLLIElement>(null);
+  const mapSelectionPendingRef = useRef(false);
+  const [mapSelectionVersion, setMapSelectionVersion] = useState(0);
+
+  const selectStopFromMap = (stop: RouteStopOccurrence) => {
+    mapSelectionPendingRef.current = true;
+    setSelectedStopKey(routeStopOccurrenceKey(stop));
+    setMapSelectionVersion((version) => version + 1);
+  };
+
+  useEffect(() => {
+    if (!mapSelectionPendingRef.current) return;
+    mapSelectionPendingRef.current = false;
+    selectedStopRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [mapSelectionVersion, selectedStopKey]);
+
+  useEffect(() => {
+    if (retryAfterAt === null) return;
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      setClockMs(now);
+      if (now >= retryAfterAt) window.clearInterval(timer);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [retryAfterAt]);
 
   useEffect(() => {
     const controller = new AbortController();
     setDetail(null);
     setError(null);
-    setSelectedStopId(null);
+    setSelectedStopKey(null);
+    setRetryAfterAt(null);
     void fetchRouteDetail(route, bound, serviceType, { signal: controller.signal })
       .then((response) => {
         if (controller.signal.aborted) return;
@@ -168,28 +202,34 @@ export function RouteDetailPage({ route, bound, serviceType, searchQuery, initia
         const normalizedInitialStopId = initialStopId?.trim().toUpperCase();
         // Ignore stale/hand-authored stop query values. ETA must only be
         // fetched after the exact variant topology confirms membership.
-        setSelectedStopId(
-          normalizedInitialStopId && response.stops.some((stop) => stop.stopId.trim().toUpperCase() === normalizedInitialStopId)
-            ? normalizedInitialStopId
-            : null,
-        );
+        const occurrences = response.stops.filter((stop) => stop.stopId.trim().toUpperCase() === normalizedInitialStopId);
+        const initialStop = initialStopSeq === undefined
+          ? (occurrences.length === 1 ? occurrences[0] : undefined)
+          : occurrences.find((stop) => stop.seq === initialStopSeq);
+        setSelectedStopKey(initialStop ? routeStopOccurrenceKey(initialStop) : null);
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
-        const message = caught instanceof Error ? caught.message : '';
-        setError(message.includes(': 404') ? 'not-found' : 'unavailable');
+        console.error('Route detail request failed', { route, bound, serviceType, error: caught });
+        const status = caught instanceof RouteDetailRequestError ? caught.status : null;
+        const retrySeconds = caught instanceof RouteDetailRequestError && status === 503 ? caught.retryAfterSeconds : null;
+        const now = Date.now();
+        setClockMs(now);
+        setRetryAfterAt(retrySeconds === null ? null : now + retrySeconds * 1000);
+        setError(status === 404 ? 'not-found' : 'unavailable');
       });
     return () => controller.abort();
-  }, [bound, initialStopId, retryCount, route, serviceType]);
+  }, [bound, initialStopId, initialStopSeq, retryCount, route, serviceType]);
 
   const selectedStop = useMemo(
-    () => detail?.stops.find((stop) => stop.stopId === selectedStopId) ?? null,
-    [detail, selectedStopId],
+    () => detail?.stops.find((stop) => routeStopOccurrenceKey(stop) === selectedStopKey) ?? null,
+    [detail, selectedStopKey],
   );
   const {
     etasMap, etaStates, lastRefreshed, lastAttemptAt, failedStopCount, loading: etaLoading, refresh,
   } = useStopETAs(selectedStop ? [selectedStop.stopId] : []);
   const selectedState = selectedStop ? etaStates[selectedStop.stopId] : undefined;
+  const retrySecondsRemaining = retryAfterAt === null ? 0 : Math.max(0, Math.ceil((retryAfterAt - clockMs) / 1000));
 
   return (
     <div className="min-h-screen">
@@ -225,7 +265,7 @@ export function RouteDetailPage({ route, bound, serviceType, searchQuery, initia
                 ? (lang === 'en' ? 'Route variant not found' : '找不到此路線班次')
                 : (lang === 'en' ? 'Route data is temporarily unavailable' : '暫時無法載入路線資料')}
             </p>
-            {error === 'unavailable' && <button type="button" onClick={() => setRetryCount((count) => count + 1)} className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-500/15 dark:text-blue-300">{lang === 'en' ? 'Retry' : '重試'}</button>}
+            {error === 'unavailable' && <button type="button" disabled={retrySecondsRemaining > 0} onClick={() => setRetryCount((count) => count + 1)} className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:text-blue-300">{retrySecondsRemaining > 0 ? (lang === 'en' ? `Retry in ${retrySecondsRemaining}s` : `${retrySecondsRemaining} 秒後重試`) : (lang === 'en' ? 'Retry' : '重試')}</button>}
             <Link href={routeSearchHref(searchQuery)} className="text-sm font-semibold text-blue-600 hover:underline dark:text-blue-400">{lang === 'en' ? 'Back to route search' : '返回路線搜尋'}</Link>
           </div>
         )}
@@ -258,17 +298,26 @@ export function RouteDetailPage({ route, bound, serviceType, searchQuery, initia
               ) : null}
             </section>
 
+            <RouteMap
+              stops={detail.stops}
+              selectedStopKey={selectedStopKey}
+              onSelectStop={selectStopFromMap}
+              lang={lang}
+            />
+
             <section className="mt-6">
               <h2 className="flex items-center gap-2 text-lg font-bold text-[var(--foreground)]"><Bus className="h-5 w-5 text-blue-600 dark:text-blue-400" />{lang === 'en' ? 'Stops' : '站序'}</h2>
               <p className="mt-1 text-sm text-[var(--muted)]">{lang === 'en' ? 'Select a stop to check its live ETA.' : '點選巴士站以查看即時到站時間。'}</p>
+              {!selectedStop && initialStopSeq === undefined && detail.stops.filter((stop) => stop.stopId === initialStopId?.trim().toUpperCase()).length > 1 && <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">{lang === 'en' ? 'This stop occurs more than once. Select the stop sequence you want to board at.' : '此站在路線中出現多次，請選擇你要上車的站序。'}</p>}
               <ol className="mt-4 overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)]">
                 {detail.stops.map((stop) => {
-                  const selected = selectedStopId === stop.stopId;
+                  const stopKey = routeStopOccurrenceKey(stop);
+                  const selected = selectedStopKey === stopKey;
                   return (
-                    <li key={`${stop.seq}-${stop.stopId}`} className="border-b border-[var(--divider)] last:border-b-0">
+                    <li key={`${stop.seq}-${stop.stopId}`} ref={selected ? selectedStopRowRef : null} className="border-b border-[var(--divider)] last:border-b-0">
                       <button
                         type="button"
-                        onClick={() => setSelectedStopId((current) => current === stop.stopId ? null : stop.stopId)}
+                        onClick={() => setSelectedStopKey((current) => current === stopKey ? null : stopKey)}
                         aria-expanded={selected}
                         className={clsx('flex w-full items-start gap-3 border-l-4 border-transparent px-4 py-3.5 text-left transition hover:bg-blue-500/5 focus:bg-blue-500/5 focus:outline-none', selected && 'border-blue-500 bg-blue-500/10')}
                       >

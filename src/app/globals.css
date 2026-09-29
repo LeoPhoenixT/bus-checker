@@ -14,7 +14,7 @@
   --card-border: #e2e8f0;
   --input-bg: #ffffff;
   --input-border: #cbd5e1;
-  --muted: #64748b;
+  --muted: #5b677a;
   --divider: #e2e8f0;
 }
 
@@ -27,7 +27,7 @@
   --card-border: rgba(255,255,255,0.10);
   --input-bg: rgba(255,255,255,0.05);
   --input-border: rgba(255,255,255,0.10);
-  --muted: #6b7280;
+  --muted: #8b949e;
   --divider: rgba(255,255,255,0.06);
 }
 

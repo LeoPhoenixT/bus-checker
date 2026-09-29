@@ -113,7 +113,7 @@ export function RouteSearchPage({ initialQuery = '' }: { initialQuery?: string }
             spellCheck={false}
             aria-label={lang === 'en' ? 'Search route number' : '搜尋路線號碼'}
             placeholder={lang === 'en' ? 'e.g. 87D' : '例如：87D'}
-            className="h-14 w-full rounded-2xl border border-[var(--input-border)] bg-[var(--input-bg)] py-3 pl-12 pr-12 text-xl font-semibold uppercase text-[var(--foreground)] outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15"
+            className="h-14 w-full rounded-2xl border border-[var(--input-border)] bg-[var(--input-bg)] py-3 pl-12 pr-12 text-xl font-semibold uppercase text-[var(--foreground)] placeholder:text-[var(--muted)] outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15"
           />
           {query && (
             <button

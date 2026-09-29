@@ -61,15 +61,12 @@ export function useDirectRoutes(
       signal: controller.signal,
     })
       .then(async (response) => {
-        const data: unknown = await response.json();
         if (controller.signal.aborted) return;
         if (!response.ok) {
-          const message = typeof data === 'object' && data !== null && 'error' in data
-            && typeof data.error === 'string'
-            ? data.error
-            : `Direct-route search failed (${response.status})`;
-          throw new Error(message);
+          throw new Error(`Direct-route search failed (HTTP ${response.status})`);
         }
+        const data: unknown = await response.json();
+        if (controller.signal.aborted) return;
         if (typeof data !== 'object' || data === null || !('matchesByOriginStop' in data)) {
           throw new Error('Direct-route search returned an invalid response');
         }
@@ -78,8 +75,9 @@ export function useDirectRoutes(
       })
       .catch((requestError: unknown) => {
         if (controller.signal.aborted) return;
+        console.error('Direct-route request failed', requestError);
         setMatchesByOriginStop({});
-        setError(requestError instanceof Error ? requestError.message : 'Direct-route search failed');
+        setError('unavailable');
         setCompletedKey(queryKey);
       })
       .finally(() => {

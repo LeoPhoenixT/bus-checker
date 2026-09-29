@@ -10,6 +10,16 @@ export interface FetchStopETAOptions {
   signal?: AbortSignal;
 }
 
+export class RouteDetailRequestError extends Error {
+  constructor(
+    readonly status: number,
+    readonly retryAfterSeconds: number | null,
+  ) {
+    super(`Failed to fetch route detail: ${status}`);
+    this.name = 'RouteDetailRequestError';
+  }
+}
+
 export async function fetchStopETAs(
   stopId: string,
   { signal }: FetchStopETAOptions = {},
@@ -34,7 +44,12 @@ export async function fetchRouteDetail(
 ): Promise<RouteDetail> {
   const params = new URLSearchParams({ bound, serviceType });
   const res = await fetch(`/api/routes/${encodeURIComponent(route)}?${params}`, { signal });
-  if (!res.ok) throw new Error(`Failed to fetch route detail: ${res.status}`);
+  if (!res.ok) {
+    const header = res.headers.get('Retry-After');
+    const seconds = header !== null && /^\d+$/.test(header) ? Number(header) : NaN;
+    const retryAfterSeconds = Number.isSafeInteger(seconds) && seconds > 0 && seconds <= 3600 ? seconds : null;
+    throw new RouteDetailRequestError(res.status, retryAfterSeconds);
+  }
   return res.json() as Promise<RouteDetail>;
 }
 
@@ -54,6 +69,7 @@ export async function fetchFavouriteRouteStopMetadata(
     });
     if (!res.ok) throw new Error(`Failed to resolve favourites: ${res.status}`);
     const body: unknown = await res.json();
+    signal?.throwIfAborted();
     if (!body || typeof body !== 'object' || !('items' in body) || !Array.isArray(body.items) || body.items.length !== batch.length) {
       throw new Error('Invalid favourites metadata response');
     }

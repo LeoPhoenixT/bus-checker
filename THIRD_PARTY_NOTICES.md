@@ -26,6 +26,12 @@ Bus Checker uses the Hong Kong Map Service for location-search results.
 The repository MIT License does not relicense data or services supplied by the
 map provider.
 
+### OpenStreetMap
+
+Route maps use OpenStreetMap map tiles and data. Map attribution is shown on the map.
+
+- Copyright and license: https://www.openstreetmap.org/copyright
+
 ## Direct runtime dependencies
 
 | Package | Declared version | Upstream license |

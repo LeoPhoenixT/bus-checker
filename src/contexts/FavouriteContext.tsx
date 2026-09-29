@@ -58,7 +58,13 @@ export function FavouriteProvider({ children }: { children: ReactNode }) {
     setFavourites((previous) => {
       const next = previous.some((item) => favouriteRouteStopKey(item) === key)
         ? previous.filter((item) => favouriteRouteStopKey(item) !== key)
-        : [...previous, normalized];
+        : [
+          // Explicitly choosing a sequence upgrades the matching legacy entry.
+          ...previous.filter((item) => !(normalized.boardingSeq !== undefined && item.boardingSeq === undefined
+            && item.route === normalized.route && item.bound === normalized.bound
+            && item.serviceType === normalized.serviceType && item.stopId === normalized.stopId)),
+          normalized,
+        ];
       return persist(next);
     });
   }, [hydrated, persist]);

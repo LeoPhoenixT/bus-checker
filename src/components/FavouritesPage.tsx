@@ -11,6 +11,7 @@ import { fetchFavouriteRouteStopMetadata } from '@/lib/kmb';
 import { favouriteRouteStopKey } from '@/lib/favourites';
 import { getETAAgeSeconds } from '@/lib/etaFreshness';
 import { getMinutesUntil } from '@/lib/etaTime';
+import { getNullETAMessage } from '@/lib/etaPresentation';
 import { filterFavouriteRouteStopETAs } from '@/lib/routeEta';
 import type { ETAFreshness } from '@/lib/etaFreshness';
 import type { FavouriteRouteStop, FavouriteRouteStopMetadata } from '@/lib/types';
@@ -21,6 +22,7 @@ import { ThemeToggle } from './ThemeToggle';
 
 function routeDetailHref(favourite: FavouriteRouteStop): string {
   const params = new URLSearchParams({ bound: favourite.bound, serviceType: favourite.serviceType, stop: favourite.stopId });
+  if (favourite.boardingSeq !== undefined) params.set('seq', String(favourite.boardingSeq));
   return `/routes/${encodeURIComponent(favourite.route)}?${params}`;
 }
 
@@ -63,12 +65,21 @@ function FavouriteCard({
   const { lang } = useLang();
   const labels = metadata ? metadataName(metadata, lang) : null;
   const missing = metadata?.status === 'missing';
+  const ambiguous = metadata?.status === 'ambiguous';
   const metadataItemUnavailable = metadata?.status === 'unavailable';
-  const hideTimes = freshness === 'very-stale' || freshness === 'unavailable' || missing || metadataUnavailable || metadataItemUnavailable;
+  const metadataReady = metadata?.status === 'resolved' && !!metadata.stop && !!metadata.variant && !metadataUnavailable;
+  const hideTimes = freshness === 'very-stale' || freshness === 'unavailable' || !metadataReady;
+  const detailFavourite = { ...favourite, boardingSeq: metadata?.stop?.seq ?? favourite.boardingSeq };
+  const boardingSeq = labels ? metadata?.stop?.seq : favourite.boardingSeq;
+  const stopLabel = labels?.stop ?? favourite.stopId;
+  const removeLabel = lang === 'en'
+    ? `Remove ${favourite.route} (${favourite.bound}/${favourite.serviceType}) ${boardingSeq === undefined ? '' : `stop ${boardingSeq} `}${stopLabel} favourite`
+    : `移除 ${favourite.route}（${favourite.bound}/${favourite.serviceType}）${boardingSeq === undefined ? '' : `第 ${boardingSeq} 站 `}${stopLabel}收藏`;
+  const nullEtaMessage = getNullETAMessage(etas, lang);
   const arrivals = etas
     .map((eta) => eta.eta ? getMinutesUntil(eta.eta) : null)
-    .filter((minutes) => minutes === null || minutes >= -1)
-    .filter((minutes, index, all) => minutes === null || all.indexOf(minutes) === index)
+    .filter((minutes): minutes is number => minutes !== null && minutes >= -1)
+    .filter((minutes, index, all) => all.indexOf(minutes) === index)
     .slice(0, 3);
   const updated = ageLabel(lastSuccessfulAt, lang);
   const stale = freshness === 'stale' || freshness === 'very-stale' || freshness === 'unavailable';
@@ -76,7 +87,7 @@ function FavouriteCard({
   return (
     <article className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-sm">
       <div className="flex items-start gap-3">
-        <Link href={routeDetailHref(favourite)} className="min-w-0 flex-1 rounded-lg outline-none transition hover:opacity-80 focus:ring-2 focus:ring-blue-500/60">
+        <Link href={routeDetailHref(detailFavourite)} className="min-w-0 flex-1 rounded-lg outline-none transition hover:opacity-80 focus:ring-2 focus:ring-blue-500/60">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xl font-bold tabular-nums text-[var(--foreground)]">{favourite.route}</span>
             {Number(favourite.serviceType) >= 2 && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">{lang === 'en' ? 'Special' : '特別班'}</span>}
@@ -85,10 +96,12 @@ function FavouriteCard({
           {metadataLoading ? (
             <span className="mt-2 block h-4 w-40 animate-pulse rounded bg-[var(--card-border)]" />
           ) : labels ? (
-            <p className="mt-1 truncate text-sm text-[var(--muted)]">{labels.stop}</p>
+            <p className="mt-1 truncate text-sm text-[var(--muted)]">{boardingSeq === undefined ? labels.stop : lang === 'en' ? `Stop ${boardingSeq} · ${labels.stop}` : `第 ${boardingSeq} 站 · ${labels.stop}`}</p>
           ) : (
             <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-              {missing
+              {ambiguous
+                ? (lang === 'en' ? 'This stop occurs more than once. Open the route to choose a stop sequence.' : '此站在路線中出現多次，請開啟路線重新選擇站序。')
+                : missing
                 ? (lang === 'en' ? 'This saved stop is no longer on this route' : '此收藏站點已不在這個路線班次上')
                 : metadataUnavailable || metadataItemUnavailable
                   ? (lang === 'en' ? 'Route information is temporarily unavailable' : '暫時無法載入路線資料')
@@ -100,8 +113,8 @@ function FavouriteCard({
           type="button"
           onClick={onRemove}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] transition hover:bg-rose-500/15 hover:text-rose-600 dark:hover:text-rose-300"
-          aria-label={lang === 'en' ? `Remove ${favourite.route} favourite` : `移除${favourite.route}收藏`}
-          title={lang === 'en' ? 'Remove' : '移除'}
+          aria-label={removeLabel}
+          title={removeLabel}
         ><Trash2 className="h-4 w-4" /></button>
       </div>
 
@@ -111,7 +124,7 @@ function FavouriteCard({
         ) : hideTimes ? (
           <p className="text-sm font-medium text-[var(--muted)]">{lang === 'en' ? 'ETA unavailable' : '暫未能提供到站時間'}</p>
         ) : arrivals.length === 0 ? (
-          <p className="text-sm text-[var(--muted)]">{lang === 'en' ? 'No arrivals available' : '暫無班次資料'}</p>
+          <p className="text-sm text-[var(--muted)]">{nullEtaMessage ?? (lang === 'en' ? 'No arrivals available' : '暫無班次資料')}</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {arrivals.map((minutes, index) => (
@@ -119,14 +132,14 @@ function FavouriteCard({
                 'rounded-lg border px-2.5 py-1 text-sm font-bold tabular-nums',
                 stale ? 'border-[var(--divider)] bg-[var(--card-border)] text-[var(--muted)]' : 'border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300',
               )}>
-                {minutes === null ? '—' : minutes <= 0 ? (lang === 'en' ? 'Arriving' : '即將到達') : `${minutes} ${lang === 'en' ? 'min' : '分'}`}
+                {minutes <= 0 ? (lang === 'en' ? 'Arriving' : '即將到達') : `${minutes} ${lang === 'en' ? 'min' : '分'}`}
               </span>
             ))}
           </div>
         )}
-        {!missing && !metadataUnavailable && !metadataItemUnavailable && updated && freshness === 'slightly-old' && <p className="mt-2 text-[11px] text-[var(--muted)]">{lang === 'en' ? `Updated ${updated}` : `${updated}更新`}</p>}
-        {!missing && !metadataUnavailable && !metadataItemUnavailable && updated && freshness === 'stale' && <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">{lang === 'en' ? `ETA may be outdated · Updated ${updated}` : `到站時間可能已過時 · ${updated}更新`}</p>}
-        {!missing && !metadataUnavailable && !metadataItemUnavailable && updated && freshness === 'very-stale' && <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">{lang === 'en' ? `Last updated ${updated}` : `最後更新於 ${updated}`}</p>}
+        {metadataReady && updated && freshness === 'slightly-old' && <p className="mt-2 text-[11px] text-[var(--muted)]">{lang === 'en' ? `Updated ${updated}` : `${updated}更新`}</p>}
+        {metadataReady && updated && freshness === 'stale' && <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">{lang === 'en' ? `ETA may be outdated · Updated ${updated}` : `到站時間可能已過時 · ${updated}更新`}</p>}
+        {metadataReady && updated && freshness === 'very-stale' && <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">{lang === 'en' ? `Last updated ${updated}` : `最後更新於 ${updated}`}</p>}
       </div>
     </article>
   );
@@ -181,7 +194,7 @@ export function FavouritesPage() {
             {favourites.map((favourite) => {
               const key = favouriteRouteStopKey(favourite);
               const state = etaStates[favourite.stopId];
-              return <FavouriteCard key={key} favourite={favourite} metadata={metadataByKey.get(key)} metadataLoading={metadataState === 'loading'} metadataUnavailable={metadataState === 'error'} etas={filterFavouriteRouteStopETAs(etasMap[favourite.stopId] ?? [], favourite)} freshness={state?.freshness ?? 'unavailable'} lastSuccessfulAt={state?.lastSuccessfulAt ?? null} loading={state?.attemptStatus === 'loading'} onRemove={() => removeFavourite(favourite)} />;
+              return <FavouriteCard key={key} favourite={favourite} metadata={metadataByKey.get(key)} metadataLoading={metadataState === 'loading'} metadataUnavailable={metadataState === 'error'} etas={filterFavouriteRouteStopETAs(etasMap[favourite.stopId] ?? [], favourite, metadataByKey.get(key)?.stop?.seq)} freshness={state?.freshness ?? 'unavailable'} lastSuccessfulAt={state?.lastSuccessfulAt ?? null} loading={state?.attemptStatus === 'loading'} onRemove={() => removeFavourite(favourite)} />;
             })}
           </div>
         )}
