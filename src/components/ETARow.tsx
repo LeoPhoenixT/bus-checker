@@ -8,7 +8,7 @@ import type { DestinationStopNames, ETAEntry, Stop } from '@/lib/types';
 import type { ETAFreshness } from '@/lib/etaFreshness';
 import { getETAAgeSeconds } from '@/lib/etaFreshness';
 import { getMinutesUntil } from '@/lib/etaTime';
-import { getNullETAMessage } from '@/lib/etaPresentation';
+import { etaDisplayText, getNullETAMessage } from '@/lib/etaPresentation';
 
 interface ETARowProps {
   route: string;
@@ -26,6 +26,8 @@ interface ETARowProps {
   freshness?: ETAFreshness;
   lastSuccessfulAt?: Date | null;
   etaLoading?: boolean;
+  identityMode?: 'link' | 'label';
+  variantLabel?: string;
 }
 
 export { getMinutesUntil } from '@/lib/etaTime';
@@ -64,6 +66,8 @@ export function ETARow({
   freshness = 'fresh',
   lastSuccessfulAt = null,
   etaLoading = false,
+  identityMode = 'link',
+  variantLabel,
 }: ETARowProps) {
   const { lang } = useLang();
 
@@ -75,6 +79,10 @@ export function ETARow({
   const routeDetailLabel = (lang === 'en'
     ? `View ${route}${isSpecial ? ' special service' : ''} route details`
     : `查看${route}${isSpecial ? '特別班' : ''}路線詳情`) + (showBoardingSeq ? (lang === 'en' ? ` (stop ${boardingSeq})` : `（第 ${boardingSeq} 站）`) : '');
+  const routeBadgeClass = clsx(
+    'inline-flex w-16 shrink-0 items-center justify-center rounded-lg border px-1.5 py-0.5 text-center text-xs font-bold',
+    routeColour(route),
+  );
   const alightingStops = alightingStopIds.map((stopId) => ({
     id: stopId,
     name: destinationStopNames[stopId]?.[lang] ?? stopId,
@@ -82,21 +90,14 @@ export function ETARow({
   }));
 
   // Compute minutes for each upcoming bus; filter out clearly departed
-  const times = etas
+  const times = [...etas].sort((a, b) => a.eta_seq - b.eta_seq)
     .filter((eta): eta is ETAEntry & { eta: string } => eta.eta !== null)
     .map((eta) => ({ minutes: getMinutesUntil(eta.eta), rmk_en: eta.rmk_en, rmk_tc: eta.rmk_tc }))
     .filter((time) => time.minutes >= -1);
   const nullEtaMessage = getNullETAMessage(etas, lang);
 
-  // Deduplicate by arrival time — keep only unique minutes
-  const seenMinutes = new Set<number>();
-  const uniqueTimes = times.filter((t) => {
-    if (seenMinutes.has(t.minutes)) return false;
-    seenMinutes.add(t.minutes);
-    return true;
-  }).slice(0, 3);
-
-  const [nearest, ...later] = uniqueTimes;
+  const [nearest, ...later] = times.slice(0, 3);
+  const nearestRemark = nearest ? etaDisplayText(lang === 'en' ? nearest.rmk_en : nearest.rmk_tc) : '';
 
   // Format time unit based on language
   const timeUnit = lang === 'en' ? 'min' : '分';
@@ -108,7 +109,7 @@ export function ETARow({
     : ageSeconds < 60
       ? (lang === 'en' ? `${ageSeconds}s ago` : `${ageSeconds} 秒前`)
       : (lang === 'en' ? `${Math.floor(ageSeconds / 60)} min ago` : `${Math.floor(ageSeconds / 60)} 分鐘前`);
-  const hidesLiveETA = !etaLoading && (freshness === 'very-stale' || freshness === 'unavailable');
+  const hidesLiveETA = freshness === 'very-stale' || freshness === 'unavailable';
 
   const freshnessNotice = etaLoading && lastSuccessfulAt === null
     ? (lang === 'en' ? 'Loading ETA…' : '正在載入到站時間…')
@@ -177,17 +178,14 @@ export function ETARow({
     <div className="flex items-center gap-3 py-2.5">
       {/* Route badge */}
       <div className="flex items-center gap-1.5 shrink-0">
-        <Link
+        {identityMode === 'link' ? <Link
           href={routeDetailHref}
           aria-label={routeDetailLabel}
           title={routeDetailLabel}
-          className={clsx(
-            'inline-flex w-16 shrink-0 items-center justify-center rounded-lg border px-1.5 py-0.5 text-center text-xs font-bold transition hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-500/60',
-            routeColour(route),
-          )}
+          className={clsx(routeBadgeClass, 'transition hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-500/60')}
         >
           {route}
-        </Link>
+        </Link> : <span className={routeBadgeClass}>{route}</span>}
       </div>
 
       {/* Destination with direction prefix */}
@@ -201,8 +199,12 @@ export function ETARow({
         ) : (
           <p className="text-sm text-[var(--muted)]">{lang === 'en' ? 'No live arrivals' : '暫無班次資料'}</p>
         )}
+        {variantLabel && <p className="mt-0.5 text-xs text-[var(--muted)]">{variantLabel}</p>}
         {!hidesLiveETA && !(etaLoading && lastSuccessfulAt === null) && !nearest && nullEtaMessage && (
           <p className="mt-0.5 text-xs text-[var(--muted)]">{nullEtaMessage}</p>
+        )}
+        {!hidesLiveETA && !(etaLoading && lastSuccessfulAt === null) && nearestRemark && (
+          <p className="mt-0.5 text-xs text-[var(--muted)]">{nearestRemark}</p>
         )}
         {alightingStops.length > 0 && (
           <p className="mt-0.5 flex flex-wrap items-center gap-x-1 text-[11px] leading-snug text-blue-600 dark:text-blue-400">
@@ -241,10 +243,10 @@ export function ETARow({
           </p>
         )}
         {/* Later arrival times shown as smaller text beneath */}
-        {!hidesLiveETA && later.length > 0 && (
+        {!hidesLiveETA && !(etaLoading && lastSuccessfulAt === null) && later.length > 0 && (
           <p className="mt-0.5 flex flex-wrap gap-1.5">
             {later.map((t, i) => {
-              const rmk = lang === 'en' ? t.rmk_en : t.rmk_tc;
+              const rmk = etaDisplayText(lang === 'en' ? t.rmk_en : t.rmk_tc);
               const timeText =
                 t.minutes < 0
                   ? departed

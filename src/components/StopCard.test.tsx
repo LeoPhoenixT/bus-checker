@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { StopCard } from './StopCard';
@@ -165,6 +165,122 @@ describe('StopCard route list', () => {
     ], undefined);
     expect(screen.getByText(/^[0-9]+ 分$/)).toBeDefined();
     expect(screen.queryByText('班次暫停')).toBeNull();
+  });
+});
+
+describe('StopCard service-type predictions', () => {
+  const variants = () => [eta(), eta({ service_type: '3', seq: 17 }), eta({ service_type: '4', seq: 22 })];
+
+  it('shows shared times once and exposes every exact service-type link', () => {
+    renderCard(variants(), undefined);
+    const group = screen.getByRole('group', { name: '88X 往 目的地路線版本' });
+    expect(within(group).getAllByText(/^[0-9]+ 分$/)).toHaveLength(1);
+    const badge = within(group).getByText('88X', { exact: true });
+    const chooser = within(group).getByText('3 個路線版本 · 查看詳情');
+    expect(badge.className).toContain('rounded-lg');
+    expect(badge.compareDocumentPosition(chooser) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(group).getByText('類型 1、3、4 · 共用預報')).toBeDefined();
+    fireEvent.click(within(group).getByText('3 個路線版本 · 查看詳情'));
+    expect(within(group).getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
+      '/routes/88X?bound=O&serviceType=1&stop=ORIGIN01&seq=5',
+      '/routes/88X?bound=O&serviceType=3&stop=ORIGIN01&seq=17',
+      '/routes/88X?bound=O&serviceType=4&stop=ORIGIN01&seq=22',
+    ]);
+  });
+
+  it('preserves the open variant chooser when forecasts diverge or return to identical values', () => {
+    const view = (etas: ETAEntry[]) => <LanguageProvider><StopCard stop={stop} etas={etas} routeFilters={[]} etasLoading={false} /></LanguageProvider>;
+    const { rerender } = render(view(variants()));
+    const chooser = screen.getByText('3 個路線版本 · 查看詳情').closest('details')!;
+    fireEvent.click(screen.getByText('3 個路線版本 · 查看詳情'));
+    expect(chooser.open).toBe(true);
+    const changed = variants();
+    changed[2].eta = '2099-01-01T00:10:00+08:00';
+    rerender(view(changed));
+    expect(screen.getByText('3 個路線版本 · 查看詳情').closest('details')).toBe(chooser);
+    expect(chooser.open).toBe(true);
+    expect(screen.getAllByText(/^[0-9]+ 分$/)).toHaveLength(2);
+    expect(screen.getByText('類型 1、3 · 共用預報')).toBeDefined();
+    rerender(view(variants()));
+    expect(chooser.open).toBe(true);
+    expect(screen.getAllByText(/^[0-9]+ 分$/)).toHaveLength(1);
+  });
+
+  it('retains separate empty predictions and remarks inside one stable route container', () => {
+    renderCard([eta({ eta: null }), eta({ service_type: '3', seq: 17, eta: null, rmk_tc: '暫停服務' })], undefined);
+    expect(screen.getByText('暫無即時預報')).toBeDefined();
+    expect(screen.getByText('暫停服務')).toBeDefined();
+    expect(screen.queryByText(/共用預報/)).toBeNull();
+  });
+
+  it('shows distinct primary prediction remarks instead of sharing their identical times', () => {
+    renderCard([eta({ rmk_tc: '原定班次' }), eta({ service_type: '3', seq: 17, rmk_tc: '最後班次' })], undefined);
+    expect(screen.getByText('原定班次')).toBeDefined();
+    expect(screen.getByText('最後班次')).toBeDefined();
+    expect(screen.getAllByText(/^[0-9]+ 分$/)).toHaveLength(2);
+    expect(screen.queryByText(/共用預報/)).toBeNull();
+  });
+
+  it('counts route containers rather than variants for the five-route limit', () => {
+    renderCard([
+      ...variants().map((entry) => ({ ...entry, route: 'R1' })),
+      ...Array.from({ length: 6 }, (_, index) => eta({ route: `R${index + 2}` })),
+    ], undefined);
+    expect(screen.getByText('R5')).toBeDefined();
+    expect(screen.queryByText('R6')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '顯示其餘 2 條路線' }));
+    expect(screen.getByText('R7')).toBeDefined();
+  });
+
+  it('keeps destination-eligible variants separate even when their forecasts match', () => {
+    renderCard(variants(), [match, { ...match, serviceType: '3', boardingSeq: 17 }, { ...match, serviceType: '4', boardingSeq: 22 }]);
+    expect(screen.queryByText(/路線版本/)).toBeNull();
+    expect(screen.getAllByRole('link', { name: /查看88X/ })).toHaveLength(3);
+    expect(screen.getAllByText(/^[0-9]+ 分$/)).toHaveLength(3);
+  });
+
+  it('keeps repeated boarding occurrences visible with their own exact links', () => {
+    renderCard([eta(), eta({ seq: 23 }), eta({ service_type: '3', seq: 17 })], undefined);
+    expect(screen.queryByText(/路線版本/)).toBeNull();
+    expect(screen.getByText('於第 5 站上車')).toBeDefined();
+    expect(screen.getByText('於第 23 站上車')).toBeDefined();
+    expect(screen.getAllByRole('link', { name: /查看88X/ })).toHaveLength(3);
+  });
+
+  it.each(['very-stale', 'unavailable'] as const)('does not label unusable cached data as shared predictions: %s', (freshness) => {
+    const future = new Date(Date.now() + 120_000).toISOString();
+    const data = variants().map((entry) => ({ ...entry, eta: future }));
+    const lastSuccessfulAt = freshness === 'unavailable' ? null : new Date(Date.now() - 301_000);
+    renderCard(data, undefined, {}, { etaStates: { ORIGIN01: {
+      data, lastSuccessfulAt, lastAttemptAt: new Date(), attemptStatus: 'error', error: 'Upstream failure', freshness,
+    } } });
+    expect(screen.queryByText(/共用預報/)).toBeNull();
+    expect(screen.queryByText(/^[0-9]+ 分$/)).toBeNull();
+    expect(screen.getAllByText('暫未能提供')).toHaveLength(3);
+    expect(screen.queryByText('Upstream failure')).toBeNull();
+  });
+
+  it('keeps initial loading distinct from shared cached predictions', () => {
+    renderCard(variants(), undefined, {}, { etaStates: { ORIGIN01: {
+      data: [], lastSuccessfulAt: null, lastAttemptAt: new Date(), attemptStatus: 'loading', error: null, freshness: 'unavailable',
+    } } });
+    expect(screen.queryByText(/共用預報/)).toBeNull();
+    expect(screen.queryByText(/^[0-9]+ 分$/)).toBeNull();
+    expect(screen.getAllByText('正在載入到站時間…')).toHaveLength(3);
+  });
+
+  it('renders sparse optional destination and remark fields without throwing', () => {
+    const data = variants();
+    data.forEach((entry) => {
+      const sparse = entry as Partial<ETAEntry>;
+      delete sparse.dest_sc;
+      delete sparse.rmk_en;
+      delete sparse.rmk_tc;
+      delete sparse.rmk_sc;
+    });
+    renderCard(data, undefined);
+    expect(screen.getByText('類型 1、3、4 · 共用預報')).toBeDefined();
+    expect(screen.getAllByText(/^[0-9]+ 分$/)).toHaveLength(1);
   });
 });
 

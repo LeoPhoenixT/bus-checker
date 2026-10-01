@@ -4,6 +4,7 @@ import { MapPin } from 'lucide-react';
 import clsx from 'clsx';
 import { useLang } from '@/contexts/LanguageContext';
 import { ETARow } from './ETARow';
+import { NearbyRouteGroup } from './NearbyRouteGroup';
 import { StopLocationModal } from './StopLocationModal';
 import { filterEligibleETAs } from '@/lib/etaEligibility';
 import { isSpecialService } from '@/lib/routeVariants';
@@ -11,6 +12,7 @@ import type { ETAFreshness } from '@/lib/etaFreshness';
 import type { StopETAStateWithFreshness } from '@/hooks/useStopETAs';
 import { getStopIds } from '@/lib/stopGroups';
 import { getMinutesUntil } from '@/lib/etaTime';
+import { groupNearbyRouteVariants, nearbyVariantKey, type NearbyRouteVariant } from '@/lib/nearbyRoutePresentation';
 import type { DirectRouteMatch, DestinationStopNames, NearbyStop, ETAEntry, Stop } from '@/lib/types';
 
 interface StopCardProps {
@@ -22,17 +24,6 @@ interface StopCardProps {
   destinationStopNames?: DestinationStopNames;
   destinationStops?: Record<string, Stop>;
   etaStates?: Record<string, StopETAStateWithFreshness>;
-}
-
-interface RouteGroup {
-  route: string;
-  bound: 'I' | 'O';
-  serviceType: string;
-  boardingStopId: string;
-  boardingSeq: number;
-  isSpecial: boolean;
-  etas: ETAEntry[];
-  alightingStopIds: string[];
 }
 
 function normalize(value: unknown): string {
@@ -86,10 +77,8 @@ export function StopCard({
     && statesWithSuccessfulData.length === 0
     && !stopETALoading;
 
-  /* Keep every route variant and exact boarding stop separate. A grouped nearby
-   * card can represent colocated KMB stop IDs, so route number alone is not a
-   * safe Route Detail identity. */
-  const grouped = new Map<string, RouteGroup>();
+  // Keep exact variant identities before constructing any display containers.
+  const grouped = new Map<string, NearbyRouteVariant>();
   for (const match of destinationMatches ?? []) {
     const key = routeGroupKey(match.route, match.bound, match.serviceType, match.boardingStop, match.boardingSeq);
     const group = grouped.get(key) ?? {
@@ -136,17 +125,21 @@ export function StopCard({
         )
       : [...grouped.keys()];
 
-  const earliestArrival = (key: string) => grouped.get(key)!.etas.reduce((earliest, eta) => {
+  const variants = visibleKeys.map((key) => grouped.get(key)!);
+  const containers = destinationMatches === undefined
+    ? groupNearbyRouteVariants(variants)
+    : variants.map((variant) => ({ key: nearbyVariantKey(variant), variants: [variant] }));
+  const earliestArrival = (variants: NearbyRouteVariant[]) => variants.flatMap((variant) => variant.etas).reduce((earliest, eta) => {
     if (!eta.eta) return earliest;
     const minutes = getMinutesUntil(eta.eta);
     return minutes >= -1 ? Math.min(earliest, minutes) : earliest;
   }, Number.POSITIVE_INFINITY);
-  const rankedKeys = routeFilters.length > 0 || destinationMatches !== undefined
-    ? visibleKeys
-    : [...visibleKeys].sort((a, b) => earliestArrival(a) - earliestArrival(b));
+  const rankedContainers = routeFilters.length > 0 || destinationMatches !== undefined
+    ? containers
+    : [...containers].sort((a, b) => earliestArrival(a.variants) - earliestArrival(b.variants));
   const limitRoutes = routeFilters.length === 0 && destinationMatches === undefined;
-  const finalKeys = limitRoutes && !expandedRoutes ? rankedKeys.slice(0, 5) : rankedKeys;
-  const hiddenRouteCount = limitRoutes ? rankedKeys.length - finalKeys.length : 0;
+  const finalContainers = limitRoutes && !expandedRoutes ? rankedContainers.slice(0, 5) : rankedContainers;
+  const hiddenRouteCount = limitRoutes ? rankedContainers.length - finalContainers.length : 0;
 
   /* Route filtering may hide a card. Destination-valid cards remain visible without live ETA. */
   const matchingRouteWithoutETA = destinationMatches?.some((match) =>
@@ -154,7 +147,7 @@ export function StopCard({
   ) ?? false;
   if (
     routeFilters.length > 0
-    && finalKeys.length === 0
+    && finalContainers.length === 0
     && !matchingRouteWithoutETA
     && !etasLoading
   ) return null;
@@ -211,24 +204,27 @@ export function StopCard({
               <div className="h-5 w-14 rounded-full bg-[var(--card-border)]" />
             </div>
           ))
-        ) : finalKeys.length === 0 ? (
+        ) : finalContainers.length === 0 ? (
           <p className="py-3 text-sm text-[var(--muted)] text-center">
             {stopETAUnavailable
               ? lang === 'en' ? 'ETA unavailable' : '暫未能取得到站時間'
               : lang === 'en' ? 'No arrivals available' : '暫無班次資料'}
           </p>
         ) : (
-          finalKeys.map((key) => {
-            const group = grouped.get(key)!;
+          finalContainers.map((container) => {
+            const group = container.variants[0];
             const hasAnotherOccurrence = [...grouped.values()].some((other) => (
               other.route === group.route && other.bound === group.bound
               && other.serviceType === group.serviceType
               && other.boardingStopId === group.boardingStopId
               && other.boardingSeq !== group.boardingSeq
             ));
+            if (destinationMatches === undefined) {
+              return <NearbyRouteGroup key={container.key} container={container} showBoardingSeq={hasAnotherOccurrence} freshness={stopFreshness} lastSuccessfulAt={stopLastSuccessfulAt} etaLoading={stopETALoading} />;
+            }
             return (
               <ETARow
-                key={key}
+                key={container.key}
                 route={group.route}
                 bound={group.bound}
                 serviceType={group.serviceType}
@@ -253,7 +249,7 @@ export function StopCard({
             {lang === 'en' ? `Show ${hiddenRouteCount} more routes` : `顯示其餘 ${hiddenRouteCount} 條路線`}
           </button>
         )}
-        {limitRoutes && expandedRoutes && rankedKeys.length > 5 && (
+        {limitRoutes && expandedRoutes && rankedContainers.length > 5 && (
           <button type="button" onClick={() => setExpandedRoutes(false)} className="w-full py-3 text-center text-sm font-semibold text-blue-700 hover:underline dark:text-blue-300">
             {lang === 'en' ? 'Show fewer routes' : '收起路線'}
           </button>
