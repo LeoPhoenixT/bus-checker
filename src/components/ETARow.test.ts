@@ -15,9 +15,9 @@ function eta(overrides: Partial<ETAEntry> = {}): ETAEntry {
   };
 }
 
-function renderRow(etas: ETAEntry[]) {
+function renderRow(etas: ETAEntry[], props: Partial<Parameters<typeof ETARow>[0]> = {}) {
   return render(createElement(LanguageProvider, null, createElement(ETARow, {
-    route: '87D', bound: 'O', serviceType: '1', boardingStopId: 'STOP1', boardingSeq: 2, etas,
+    route: '87D', bound: 'O', serviceType: '1', boardingStopId: 'STOP1', boardingSeq: 2, etas, ...props,
   })));
 }
 
@@ -56,5 +56,36 @@ describe('ETARow null ETA display', () => {
     renderRow([eta({ eta: null, rmk_tc: '班次暫停' })]);
     expect(screen.getByText('班次暫停')).toBeDefined();
     expect(screen.queryByText('—')).toBeNull();
+  });
+
+  it('keeps two distinct predictions which round down to the same minute', () => {
+    renderRow([eta({ eta: '2026-09-02T12:10:05Z' }), eta({ eta_seq: 2, eta: '2026-09-02T12:10:50Z' })]);
+    expect(screen.getAllByText('10 分')).toHaveLength(2);
+  });
+
+  it('handles optional primary and null ETA remarks omitted by the upstream response', () => {
+    const sparse = eta();
+    delete (sparse as Partial<ETAEntry>).rmk_tc;
+    const { unmount } = renderRow([sparse]);
+    expect(screen.getByText('10 分')).toBeDefined();
+    unmount();
+    renderRow([{ ...sparse, eta: null }]);
+    expect(screen.getByText('暫無即時預報')).toBeDefined();
+  });
+
+  it('keeps very stale predictions hidden while a refresh is running', () => {
+    renderRow([eta(), eta({ eta_seq: 2, eta: '2026-09-02T12:20:00Z' })], {
+      freshness: 'very-stale', lastSuccessfulAt: new Date(Date.now() - 301_000), etaLoading: true,
+    });
+    expect(screen.queryByText('10 分')).toBeNull();
+    expect(screen.queryByText('20 分')).toBeNull();
+    expect(screen.getByText('暫未能提供')).toBeDefined();
+  });
+
+  it('does not leak later predictions during initial loading', () => {
+    renderRow([eta(), eta({ eta_seq: 2, eta: '2026-09-02T12:20:00Z' })], { etaLoading: true });
+    expect(screen.queryByText('10 分')).toBeNull();
+    expect(screen.queryByText('20 分')).toBeNull();
+    expect(screen.getByText('正在載入到站時間…')).toBeDefined();
   });
 });
