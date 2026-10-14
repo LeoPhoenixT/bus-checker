@@ -3,9 +3,16 @@ export const CITYBUS_METADATA_TTL_MS = 300_000;
 export const CITYBUS_REQUEST_TIMEOUT_MS = 20_000;
 
 export class CitybusError extends Error {
-  constructor(message: string, readonly status = 503, readonly retryAfterSeconds = 30) {
+  readonly retryAt: number;
+
+  constructor(message: string, readonly status = 503, retryAfterSeconds = 30) {
     super(message);
     this.name = 'CitybusError';
+    this.retryAt = Date.now() + retryAfterSeconds * 1000;
+  }
+
+  get retryAfterSeconds(): number {
+    return Math.max(0, Math.ceil((this.retryAt - Date.now()) / 1000));
   }
 }
 
@@ -43,16 +50,32 @@ export async function fetchCitybusJSON(path: string): Promise<Record<string, unk
   return body;
 }
 
-/** Process-local bounded cache. Shared work owns its timeout, never a caller's cancellation. */
+/** Bounded process-local cache. Abandon queued work only when no waiters remain. */
 export function createCitybusCache<T>(ttl: number, maxEntries: number) {
   const values = new Map<string, { value: T; expiresAt: number }>();
-  const pending = new Map<string, Promise<T>>();
+  type Pending = { promise: Promise<T>; controller: AbortController; waiters: number; settled: boolean };
+  const pending = new Map<string, Pending>();
   const failures = new Map<string, { error: CitybusError; until: number }>();
   function trim<V>(map: Map<string, V>) {
     while (map.size > maxEntries) map.delete(map.keys().next().value!);
   }
+  function join(entry: Pending, signal?: AbortSignal): Promise<T> {
+    entry.waiters++;
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      if (--entry.waiters === 0 && !entry.settled) entry.controller.abort();
+    };
+    signal?.addEventListener('abort', release, { once: true });
+    return (signal ? waitForCitybus(entry.promise, signal) : entry.promise).finally(() => {
+      signal?.removeEventListener('abort', release);
+      release();
+    });
+  }
   return {
-    get(key: string, load: () => Promise<T>): Promise<T> {
+    get(key: string, load: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
+      if (signal?.aborted) return Promise.reject(signal.reason);
       const cached = values.get(key);
       if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.value);
       values.delete(key);
@@ -60,19 +83,29 @@ export function createCitybusCache<T>(ttl: number, maxEntries: number) {
       if (failure && failure.until > Date.now()) return Promise.reject(failure.error);
       failures.delete(key);
       const active = pending.get(key);
-      if (active) return active;
-      const promise = Promise.resolve().then(load).then((value) => {
+      if (active) {
+        // Drain abandoned queued work before retrying. Started work can still fill values.
+        if (active.controller.signal.aborted) {
+          const retry = active.promise.catch(() => {}).then(() => this.get(key, load, signal));
+          return signal ? waitForCitybus(retry, signal) : retry;
+        }
+        return join(active, signal);
+      }
+      const controller = new AbortController();
+      const promise = Promise.resolve().then(() => load(controller.signal)).then((value) => {
         values.set(key, { value, expiresAt: Date.now() + ttl });
         trim(values);
         return value;
       }).catch((error: unknown) => {
+        if (controller.signal.aborted && error === controller.signal.reason) throw error;
         const failure = error instanceof CitybusError ? error : new CitybusError('Citybus data unavailable');
-        failures.set(key, { error: failure, until: Date.now() + failure.retryAfterSeconds * 1000 });
+        failures.set(key, { error: failure, until: failure.retryAt });
         trim(failures);
         throw failure;
-      }).finally(() => pending.delete(key));
-      pending.set(key, promise);
-      return promise;
+      }).finally(() => { entry.settled = true; pending.delete(key); });
+      const entry: Pending = { promise, controller, waiters: 0, settled: false };
+      pending.set(key, entry);
+      return join(entry, signal);
     },
     reset() { values.clear(); failures.clear(); pending.clear(); },
   };

@@ -69,9 +69,11 @@ export async function getCitybusRouteDetail(route: string, bound?: CitybusBound)
   if (!selected.value.length) return null;
   const variant = selectedBound === 'O' ? { ...item, bound: selectedBound }
     : { ...item, bound: selectedBound, originEn: item.destinationEn, originTc: item.destinationTc, destinationEn: item.originEn, destinationTc: item.originTc };
-  const stops = await resolveCitybusStops(selected.value, Math.max(1, Math.min(20_000, deadline - Date.now())));
+  const { stops, retryAt: stopsRetryAt } = await resolveCitybusStops(selected.value, Math.max(1, Math.min(20_000, deadline - Date.now())));
+  const retryAt = topologies.reduce((latest, result) => result.status === 'rejected'
+    ? Math.max(latest, result.reason instanceof CitybusError ? result.reason.retryAt : Date.now() + 30_000) : latest, stopsRetryAt);
   return { variant, directions, stops,
-    ...(stops.some((item) => item.status !== 'resolved') || directions.some((item) => item.status === 'unavailable') ? { retryAfterSeconds: 30 } : {}),
+    ...(retryAt ? { retryAfterSeconds: Math.max(0, Math.ceil((retryAt - Date.now()) / 1000)) } : {}),
   };
 }
 

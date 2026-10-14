@@ -93,7 +93,7 @@ describe('Citybus route provider', () => {
     const release: ((response: Response) => void)[] = [];
     fetchMock.mockImplementation(() => new Promise<Response>((resolve) => release.push(resolve)));
     const occurrences = Array.from({ length: 10 }, (_, index) => ({ stopId: String(index + 1).padStart(6, '0'), seq: index + 1 }));
-    const result = await resolveCitybusStops(occurrences, 10);
+    const { stops: result } = await resolveCitybusStops(occurrences, 10);
     expect(fetchMock).toHaveBeenCalledTimes(6);
     expect(result).toHaveLength(10);
     expect(result.every((row) => row.status === 'unavailable')).toBe(true);
@@ -104,6 +104,121 @@ describe('Citybus route provider', () => {
   it('rejects duplicate sequence numbers without merging different occurrences', async () => {
     serve({ 'route-stop/CTB/1/outbound': { data: [topology(1), topology(1, '000002')] } });
     await expect(fetchCitybusRouteStops('1', 'O')).rejects.toMatchObject({ status: 502 });
+  });
+
+  it('removes expired queued lookups before they can start upstream requests', async () => {
+    const releases: (() => void)[] = [];
+    fetchMock.mockImplementation((url: string) => {
+      const id = url.split('/').at(-1)!;
+      if (Number(id) > 6) return Promise.resolve(json({ data: { ...stop, stop: id } }));
+      return new Promise<Response>((resolve) => releases.push(() => resolve(json({ data: { ...stop, stop: id } }))));
+    });
+    const blockers = Array.from({ length: 6 }, (_, index) => fetchCitybusStop(String(index + 1).padStart(6, '0')));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const queued = Array.from({ length: 6 }, (_, index) => ({ stopId: String(index + 101).padStart(6, '0'), seq: index + 1 }));
+    const { stops } = await resolveCitybusStops(queued, 10);
+    expect(stops.every((row) => row.status === 'unavailable')).toBe(true);
+    releases.forEach((release) => release());
+    await Promise.all(blockers);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    // Cancellation must not leave a failure backoff for a subsequent real lookup.
+    await expect(fetchCitybusStop('000101')).resolves.toMatchObject({ stopId: '000101' });
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+  });
+
+  it('keeps queued shared work when another waiter still needs it', async () => {
+    const releases: (() => void)[] = [];
+    fetchMock.mockImplementation((url: string) => {
+      const id = url.split('/').at(-1)!;
+      if (id === '000101') return Promise.resolve(json({ data: { ...stop, stop: id } }));
+      return new Promise<Response>((resolve) => releases.push(() => resolve(json({ data: { ...stop, stop: id } }))));
+    });
+    const blockers = Array.from({ length: 6 }, (_, index) => fetchCitybusStop(String(index + 1).padStart(6, '0')));
+    const cancelled = new AbortController();
+    const first = fetchCitybusStop('000101', cancelled.signal);
+    const firstRejection = expect(first).rejects.toBeInstanceOf(CitybusError);
+    const second = fetchCitybusStop('000101');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    cancelled.abort();
+    await firstRejection;
+    releases.forEach((release) => release());
+    await Promise.all(blockers);
+    await expect(second).resolves.toMatchObject({ stopId: '000101' });
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+  });
+
+  it('allows an immediate new waiter after all queued waiters cancel', async () => {
+    const releases: (() => void)[] = [];
+    fetchMock.mockImplementation((url: string) => {
+      const id = url.split('/').at(-1)!;
+      if (id === '000101') return Promise.resolve(json({ data: { ...stop, stop: id } }));
+      return new Promise<Response>((resolve) => releases.push(() => resolve(json({ data: { ...stop, stop: id } }))));
+    });
+    const blockers = Array.from({ length: 6 }, (_, index) => fetchCitybusStop(String(index + 1).padStart(6, '0')));
+    const controller = new AbortController();
+    const cancelled = fetchCitybusStop('000101', controller.signal);
+    const rejection = expect(cancelled).rejects.toBeInstanceOf(CitybusError);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.abort();
+    const replacement = fetchCitybusStop('000101');
+    await rejection;
+    releases.forEach((release) => release());
+    await Promise.all(blockers);
+    await expect(replacement).resolves.toMatchObject({ stopId: '000101' });
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+  });
+
+  it('preserves already-started work and shares its result with a later caller', async () => {
+    let release!: (response: Response) => void;
+    fetchMock.mockImplementation(() => new Promise<Response>((resolve) => { release = resolve; }));
+    const controller = new AbortController();
+    const cancelled = fetchCitybusStop('000001', controller.signal);
+    const rejection = expect(cancelled).rejects.toBeInstanceOf(CitybusError);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.abort();
+    const replacement = fetchCitybusStop('000001');
+    await rejection;
+    release(json({ data: stop }));
+    await expect(replacement).resolves.toMatchObject({ stopId: '000001' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes partial stop backoff to route details and counts down cached failures', async () => {
+    let now = 100_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith('/route/CTB')) return json({ data: [route] });
+      if (url.endsWith('/outbound')) return json({ data: [topology(1)] });
+      if (url.endsWith('/inbound')) return json({ data: [] });
+      return new Response('', { status: 429, headers: { 'Retry-After': '120' } });
+    });
+    expect((await getCitybusRouteDetail('1', 'O'))?.retryAfterSeconds).toBe(120);
+    now += 31_000;
+    expect((await getCitybusRouteDetail('1', 'O'))?.retryAfterSeconds).toBe(89);
+    await expect(fetchCitybusStop('000001')).rejects.toMatchObject({ retryAfterSeconds: 89 });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    now += 89_000;
+    fetchMock.mockResolvedValue(json({ data: stop }));
+    const recovered = await getCitybusRouteDetail('1', 'O');
+    expect(recovered?.stops[0].status).toBe('resolved');
+    expect(recovered).not.toHaveProperty('retryAfterSeconds');
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it('uses the longest remaining backoff across failed stops and directions', async () => {
+    let now = 100_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith('/route/CTB')) return json({ data: [route] });
+      if (url.endsWith('/outbound')) return json({ data: [topology(1)] });
+      return new Response('', { status: 429, headers: { 'Retry-After': url.endsWith('/inbound') ? '120' : '60' } });
+    });
+    expect((await getCitybusRouteDetail('1', 'O'))?.retryAfterSeconds).toBe(120);
+    now += 31_000;
+    expect((await getCitybusRouteDetail('1', 'O'))?.retryAfterSeconds).toBe(89);
+    await expect(getCitybusRouteDetail('1', 'I')).rejects.toMatchObject({ retryAfterSeconds: 89 });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });
 
