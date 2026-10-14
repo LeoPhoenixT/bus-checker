@@ -1,4 +1,4 @@
 export const SITE_URL = new URL("https://bus.leotctam.com");
 export const SITE_NAME = "Bus Checker";
 export const SITE_DESCRIPTION =
-  "九巴 KMB 巴士即時到站時間及附近巴士站查詢。Real-time KMB bus arrival times and nearby-stop search in Hong Kong.";
+  "九巴附近巴士站及九巴、城巴路線到站時間查詢。KMB nearby stops and KMB / Citybus route arrival times in Hong Kong.";

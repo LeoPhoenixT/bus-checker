@@ -14,6 +14,7 @@ import { getMinutesUntil } from '@/lib/etaTime';
 import { getNullETAMessage } from '@/lib/etaPresentation';
 import type { ETAEntry, FavouriteRouteStop, RouteDetail, RouteDetailStop, RouteStopOccurrence, RouteVariant } from '@/lib/types';
 import { routeStopOccurrenceKey } from '@/lib/routeStopOccurrence';
+import { routeSearchHref as searchHref, type RouteOperatorFilter } from '@/lib/routeSearch';
 import { LanguageToggle } from './LanguageToggle';
 import { PrimaryNavigation } from './PrimaryNavigation';
 import { RefreshIndicator } from './RefreshIndicator';
@@ -25,19 +26,17 @@ interface RouteDetailPageProps {
   bound: 'I' | 'O';
   serviceType: string;
   searchQuery?: string;
+  searchFilter?: RouteOperatorFilter;
   /** A nearby-result deep link may preselect an exact boarding stop. */
   initialStopId?: string;
   initialStopSeq?: number;
 }
 
-function routeDetailHref(variant: RouteVariant, searchQuery?: string): string {
+function routeDetailHref(variant: RouteVariant, searchQuery?: string, searchFilter: RouteOperatorFilter = 'all'): string {
   const params = new URLSearchParams({ bound: variant.bound, serviceType: variant.serviceType });
   if (searchQuery) params.set('q', searchQuery);
+  if (searchFilter !== 'all') params.set('filter', searchFilter);
   return `/routes/${encodeURIComponent(variant.route)}?${params}`;
-}
-
-function routeSearchHref(searchQuery?: string): string {
-  return searchQuery ? `/routes?q=${encodeURIComponent(searchQuery)}` : '/routes';
 }
 
 function names(variant: RouteVariant, lang: 'en' | 'tc'): { origin: string; destination: string } {
@@ -155,7 +154,7 @@ function SelectedStopETA({
   );
 }
 
-export function RouteDetailPage({ route, bound, serviceType, searchQuery, initialStopId, initialStopSeq }: RouteDetailPageProps) {
+export function RouteDetailPage({ route, bound, serviceType, searchQuery, searchFilter = 'all', initialStopId, initialStopSeq }: RouteDetailPageProps) {
   const { lang } = useLang();
   const [detail, setDetail] = useState<RouteDetail | null>(null);
   const [error, setError] = useState<'not-found' | 'unavailable' | null>(null);
@@ -236,7 +235,7 @@ export function RouteDetailPage({ route, bound, serviceType, searchQuery, initia
       <header className="border-b border-white/10 bg-gradient-to-r from-blue-700 via-blue-600 to-blue-700 shadow-xl">
         <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-4">
           <div className="flex items-center justify-between gap-4">
-            <Link href={routeSearchHref(searchQuery)} className="flex min-w-0 items-center gap-2.5 text-white transition-opacity hover:opacity-85">
+            <Link href={searchHref(searchQuery, searchFilter)} className="flex min-w-0 items-center gap-2.5 text-white transition-opacity hover:opacity-85">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15"><ArrowLeft className="h-5 w-5" /></span>
               <span>
                 <span className="block text-lg font-bold leading-none tracking-tight">{route}</span>
@@ -266,7 +265,7 @@ export function RouteDetailPage({ route, bound, serviceType, searchQuery, initia
                 : (lang === 'en' ? 'Route data is temporarily unavailable' : '暫時無法載入路線資料')}
             </p>
             {error === 'unavailable' && <button type="button" disabled={retrySecondsRemaining > 0} onClick={() => setRetryCount((count) => count + 1)} className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:text-blue-300">{retrySecondsRemaining > 0 ? (lang === 'en' ? `Retry in ${retrySecondsRemaining}s` : `${retrySecondsRemaining} 秒後重試`) : (lang === 'en' ? 'Retry' : '重試')}</button>}
-            <Link href={routeSearchHref(searchQuery)} className="text-sm font-semibold text-blue-600 hover:underline dark:text-blue-400">{lang === 'en' ? 'Back to route search' : '返回路線搜尋'}</Link>
+            <Link href={searchHref(searchQuery, searchFilter)} className="text-sm font-semibold text-blue-600 hover:underline dark:text-blue-400">{lang === 'en' ? 'Back to route search' : '返回路線搜尋'}</Link>
           </div>
         )}
         {detail && (
@@ -278,7 +277,7 @@ export function RouteDetailPage({ route, bound, serviceType, searchQuery, initia
               </div>
               <p className="mt-2 text-base font-semibold text-[var(--foreground)]">{names(detail.variant, lang).origin} <span className="px-1 text-[var(--muted)]">→</span> {names(detail.variant, lang).destination}</p>
               {detail.reverseVariants.length === 1 ? (
-                <Link href={routeDetailHref(detail.reverseVariants[0], searchQuery)} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-500/15 dark:text-blue-300">
+                <Link href={routeDetailHref(detail.reverseVariants[0], searchQuery, searchFilter)} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-500/15 dark:text-blue-300">
                   <RefreshCw className="h-4 w-4" />{lang === 'en' ? 'View reverse direction' : '查看反方向'}
                 </Link>
               ) : detail.reverseVariants.length > 1 ? (
@@ -288,7 +287,7 @@ export function RouteDetailPage({ route, bound, serviceType, searchQuery, initia
                   </summary>
                   <div className="mt-2 overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--popover-bg)]">
                     {detail.reverseVariants.map((variant) => (
-                      <Link key={`${variant.route}|${variant.bound}|${variant.serviceType}`} href={routeDetailHref(variant, searchQuery)} className="block border-b border-[var(--divider)] px-3 py-3 text-sm last:border-b-0 hover:bg-blue-500/5">
+                      <Link key={`${variant.route}|${variant.bound}|${variant.serviceType}`} href={routeDetailHref(variant, searchQuery, searchFilter)} className="block border-b border-[var(--divider)] px-3 py-3 text-sm last:border-b-0 hover:bg-blue-500/5">
                         <span className="font-semibold text-[var(--foreground)]">{names(variant, lang).origin} → {names(variant, lang).destination}</span>
                         {variant.isSpecial && <span className="ml-2 text-xs text-amber-700 dark:text-amber-300">{lang === 'en' ? 'Special' : '特別班'}</span>}
                       </Link>

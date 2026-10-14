@@ -5,7 +5,7 @@ export function etaDisplayText(value: unknown): string {
 }
 
 /** Prefer the operator's local-language remark when ETA rows have no time. */
-export function getNullETAMessage(etas: ETAEntry[], lang: Lang): string | null {
+export function getNullETAMessage(etas: Pick<ETAEntry, 'eta' | 'rmk_en' | 'rmk_tc'>[], lang: Lang): string | null {
   let hasNullETA = false;
   for (const eta of etas) {
     if (eta.eta !== null) continue;

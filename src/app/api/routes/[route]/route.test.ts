@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const getKmbRouteDetailMock = vi.hoisted(() => vi.fn());
 const getKmbRetryAfterSecondsMock = vi.hoisted(() => vi.fn());
+const getCitybusRouteDetailMock = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/server/citybusRoutes', () => ({ getCitybusRouteDetail: getCitybusRouteDetailMock }));
 
 vi.mock('@/lib/server/kmbRoutes', () => ({
   KmbRoutesError: class KmbRoutesError extends Error {},
@@ -20,6 +22,19 @@ function context(route: string) {
 afterEach(() => vi.resetAllMocks());
 
 describe('GET /api/routes/[route]', () => {
+  it('supports Citybus without a KMB service type and keeps partial detail responses retryable', async () => {
+    getCitybusRouteDetailMock.mockResolvedValue({ variant: { operator: 'CTB', route: '1' }, stops: [] });
+    const response = await GET(new Request('http://localhost/api/routes/1?operator=CTB'), context('1'));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(getCitybusRouteDetailMock).toHaveBeenCalledWith('1', undefined);
+    expect(getKmbRouteDetailMock).not.toHaveBeenCalled();
+  });
+  it('rejects invalid Citybus directions and unsupported operators before loading data', async () => {
+    expect((await GET(new Request('http://localhost/api/routes/1?operator=CTB&bound=X'), context('1'))).status).toBe(400);
+    expect((await GET(new Request('http://localhost/api/routes/1?operator=all'), context('1'))).status).toBe(400);
+    expect(getCitybusRouteDetailMock).not.toHaveBeenCalled();
+  });
   it('validates the exact route variant identity', async () => {
     const response = await GET(new Request('http://localhost/api/routes/87D?bound=O'), context('87D'));
     expect(response.status).toBe(400);

@@ -5,7 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: SITE_URL,
-  title: `${SITE_NAME} | KMB Bus ETA & Nearby Stops in Hong Kong`,
+  title: `${SITE_NAME} | KMB & Citybus Routes, ETA & Nearby KMB Stops`,
   description: SITE_DESCRIPTION,
   alternates: {
     canonical: "/",
@@ -14,14 +14,14 @@ export const metadata: Metadata = {
     type: "website",
     url: "/",
     siteName: SITE_NAME,
-    title: `${SITE_NAME} | KMB Bus ETA & Nearby Stops in Hong Kong`,
+    title: `${SITE_NAME} | KMB & Citybus Routes, ETA & Nearby KMB Stops`,
     description: SITE_DESCRIPTION,
     locale: "zh_HK",
     alternateLocale: "en_HK",
   },
   twitter: {
     card: "summary_large_image",
-    title: `${SITE_NAME} | KMB Bus ETA & Nearby Stops in Hong Kong`,
+    title: `${SITE_NAME} | KMB & Citybus Routes, ETA & Nearby KMB Stops`,
     description: SITE_DESCRIPTION,
     images: ["/opengraph-image"],
   },
