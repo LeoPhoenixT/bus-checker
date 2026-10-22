@@ -20,14 +20,36 @@ function renderPage() {
   );
 }
 
-beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({ routes: [], truncated: false }))));
+});
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe('RouteSearchPage', () => {
+  it('distinguishes same-number operators and preserves the Citybus filter in URLs', async () => {
+    searchRoutesMock.mockResolvedValue({ routes: [{
+      route: '1', bound: 'O', serviceType: '1', originEn: 'KMB A', originTc: '九巴起點', destinationEn: 'KMB B', destinationTc: '九巴終點', isSpecial: false,
+    }], truncated: false });
+    vi.mocked(fetch).mockImplementation(async () => new Response(JSON.stringify({ routes: [{
+      operator: 'CTB', route: '1', originEn: 'Central', originTc: '中環', destinationEn: 'Happy Valley', destinationTc: '跑馬地',
+    }], truncated: false })));
+    renderPage();
+    fireEvent.change(screen.getByRole('textbox', { name: '搜尋路線號碼' }), { target: { value: '1' } });
+    await act(() => vi.advanceTimersByTimeAsync(180));
+    await waitFor(() => expect(screen.getByText('往 跑馬地')).toBeDefined());
+    expect(screen.getByText('往 九巴終點')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: '城巴' }));
+    expect(screen.queryByText('往 九巴終點')).toBeNull();
+    expect(screen.getByRole('link', { name: /往 跑馬地/ }).getAttribute('href')).toBe('/routes/1?operator=CTB&q=1&filter=CTB');
+    expect(window.location.search).toBe('?q=1&operator=CTB');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
   it('debounces normalized route lookup and renders separate special-service variants', async () => {
     searchRoutesMock.mockResolvedValue({ routes: [
       {

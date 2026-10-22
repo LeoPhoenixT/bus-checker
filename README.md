@@ -2,7 +2,9 @@
 
 Bus Checker is a bilingual, mobile-friendly web application for finding nearby
 KMB bus stops, viewing estimated arrival times, filtering routes, saving
-favourites, and finding direct routes toward a destination.
+favourites, and finding direct routes toward a destination. Route lookup also
+supports Citybus, with direction selection, ordered stops, a route map, and
+live arrivals at the selected stop.
 
 The deployed application is available at [bus.leotctam.com](https://bus.leotctam.com/).
 
@@ -10,10 +12,15 @@ The deployed application is available at [bus.leotctam.com](https://bus.leotctam
 
 - Nearby-stop discovery using browser geolocation
 - Live KMB estimated arrival times
+- KMB and Citybus route search, route maps, and selected-stop arrival times
 - Direct-route matching to a selected stop or map location
 - English and Traditional Chinese interfaces
 - Light and dark themes
 - Browser-local favourite routes
+
+Nearby-stop discovery, destination/direct-route matching, and favourites
+currently support KMB. Citybus is available through route search; its stop
+metadata is loaded on demand for the selected route.
 
 ## Requirements
 
@@ -54,8 +61,11 @@ for the Docker Compose deployment workflow.
 
 The application requests KMB estimated-arrival and related transport data from
 the Hong Kong Government open-data service published through
-[DATA.GOV.HK](https://data.gov.hk/en-data/dataset/hk-td-tis_21-etakmb), and
-location-search results from the [Hong Kong Map Service](https://www.map.gov.hk/).
+[DATA.GOV.HK](https://data.gov.hk/en-data/dataset/hk-td-tis_21-etakmb).
+Citybus route, stop, and arrival data is supplied by Citybus Limited through
+the [Citybus open-data dataset](https://data.gov.hk/en-data/dataset/ctb-eta-transport-realtime-eta)
+using its V2 API. Location-search results come from the
+[Hong Kong Map Service](https://www.map.gov.hk/).
 
 The source code authored for this repository is licensed under MIT. That license
 does not relicense third-party transport data, map/search data, APIs, services,
@@ -64,7 +74,7 @@ licenses. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the current
 dependency and data-source inventory and redistribution notes.
 
 This project is independently developed and is not affiliated with or endorsed
-by KMB, the Transport Department, DATA.GOV.HK, the HKSAR Government, or the Hong
+by KMB, Citybus, the Transport Department, DATA.GOV.HK, the HKSAR Government, or the Hong
 Kong Map Service.
 
 Arrival times, route information, map results, and external-service

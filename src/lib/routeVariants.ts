@@ -37,20 +37,22 @@ function compareText(a: string, b: string): number {
 }
 
 export function sortRouteVariants(variants: RouteVariant[], query = ''): RouteVariant[] {
+  return [...variants].sort((a, b) => compareRouteVariants(a, b, query));
+}
+
+export function compareRouteVariants(a: RouteVariant, b: RouteVariant, query = ''): number {
   const normalizedQuery = normalizeRouteQuery(query);
   const score = (route: string) => route === normalizedQuery ? 0 : route.startsWith(normalizedQuery) ? 1 : 2;
-  return [...variants].sort((a, b) => {
-    const routeScore = score(a.route) - score(b.route);
-    if (routeScore) return routeScore;
-    const routeComparison = compareText(a.route, b.route);
-    if (routeComparison) return routeComparison;
-    if (a.isSpecial !== b.isSpecial) return a.isSpecial ? 1 : -1;
-    const originComparison = compareText(a.originTc || a.originEn, b.originTc || b.originEn);
-    if (originComparison) return originComparison;
-    const destinationComparison = compareText(a.destinationTc || a.destinationEn, b.destinationTc || b.destinationEn);
-    if (destinationComparison) return destinationComparison;
-    return compareText(a.serviceType, b.serviceType);
-  });
+  const routeScore = score(a.route) - score(b.route);
+  if (routeScore) return routeScore;
+  const routeComparison = compareText(a.route, b.route);
+  if (routeComparison) return routeComparison;
+  if (a.isSpecial !== b.isSpecial) return a.isSpecial ? 1 : -1;
+  const originComparison = compareText(a.originTc || a.originEn, b.originTc || b.originEn);
+  if (originComparison) return originComparison;
+  const destinationComparison = compareText(a.destinationTc || a.destinationEn, b.destinationTc || b.destinationEn);
+  if (destinationComparison) return destinationComparison;
+  return compareText(a.serviceType, b.serviceType);
 }
 
 function sameName(a: string, b: string): boolean {

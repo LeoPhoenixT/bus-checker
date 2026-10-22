@@ -17,6 +17,20 @@ the Hong Kong Government open-data service published through DATA.GOV.HK.
 The repository MIT License applies to Bus Checker source code and does not
 relicense third-party transport data.
 
+### Citybus Limited / DATA.GOV.HK
+
+Citybus route search and route details use Citybus V2 route, stop, and
+estimated-arrival data. The data is supplied by Citybus Limited through
+DATA.GOV.HK; its intellectual property belongs to Citybus Limited.
+Source attribution is displayed on the route-search and Citybus detail pages.
+
+- Dataset: https://data.gov.hk/en-data/dataset/ctb-eta-transport-realtime-eta
+- API specification: https://www.citybus.com.hk/datagovhk/bus_eta_api_specifications.pdf
+- Data dictionary: https://www.citybus.com.hk/datagovhk/bus_eta_data_dictionary.pdf
+- Terms: https://data.gov.hk/en/terms-and-conditions
+
+The repository MIT License does not relicense Citybus data or imply endorsement.
+
 ### Hong Kong Map Service
 
 Bus Checker uses the Hong Kong Map Service for location-search results.

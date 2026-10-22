@@ -1,5 +1,6 @@
 import { RouteSearchPage } from '@/components/RouteSearchPage';
 import { isValidRouteQuery, normalizeRouteQuery } from '@/lib/routeVariants';
+import { isRouteOperatorFilter } from '@/lib/routeSearch';
 
 export default async function RoutesPage({
   searchParams,
@@ -8,5 +9,6 @@ export default async function RoutesPage({
 }) {
   const query = await searchParams;
   const initialQuery = typeof query.q === 'string' ? normalizeRouteQuery(query.q) : '';
-  return <RouteSearchPage initialQuery={isValidRouteQuery(initialQuery) ? initialQuery : ''} />;
+  return <RouteSearchPage initialQuery={isValidRouteQuery(initialQuery) ? initialQuery : ''}
+    initialFilter={isRouteOperatorFilter(query.operator) ? query.operator : 'all'} />;
 }
