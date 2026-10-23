@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { matchDirectRoutes } from '@/lib/directRouteMatcher';
 import { fetchKmbRouteStops, KmbRouteStopsError } from '@/lib/server/kmbRouteStops';
+import { readBoundedJson, RequestBodyTooLargeError } from '@/lib/server/requestBody';
 
 const VALID_STOP_ID = /^[A-Z0-9]{8,32}$/i;
 const MAX_CANDIDATES_PER_AREA = 10_000;
-const MAX_REQUEST_BYTES = 512_000;
 
 function normalizeStopIds(value: unknown): string[] | null {
   if (!Array.isArray(value) || value.length > MAX_CANDIDATES_PER_AREA) return null;
@@ -13,15 +13,13 @@ function normalizeStopIds(value: unknown): string[] | null {
 }
 
 export async function POST(request: Request) {
-  const contentLength = Number(request.headers.get('content-length'));
-  if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
-    return NextResponse.json({ error: 'Request body is too large' }, { status: 413 });
-  }
-
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
+    body = await readBoundedJson(request);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return NextResponse.json({ error: 'Request body is too large' }, { status: 413 });
+    }
     return NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 });
   }
 

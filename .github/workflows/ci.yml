@@ -19,13 +19,11 @@ jobs:
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10.27.0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 26
+          node-version-file: .node-version
           cache: pnpm
 
       - name: Install dependencies
@@ -36,3 +34,29 @@ jobs:
 
       - name: Build application
         run: pnpm build
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image
+        run: docker build --pull --tag bus-checker:ci .
+      - name: Smoke-test standalone server as non-root
+        run: |
+          docker run --detach --name bus-checker-smoke --publish 127.0.0.1:3000:3000 bus-checker:ci
+          trap 'docker logs bus-checker-smoke; docker rm --force bus-checker-smoke' EXIT
+          curl --fail --retry 15 --retry-all-errors --retry-delay 2 http://127.0.0.1:3000/ --output /tmp/home.html
+          curl --fail http://127.0.0.1:3000/routes --output /dev/null
+          curl --fail http://127.0.0.1:3000/favourites --output /dev/null
+          asset=$(grep -oE '/_next/static/[^" ]+\.js' /tmp/home.html | sed -n '1p')
+          test -n "$asset"
+          curl --fail "http://127.0.0.1:3000$asset" --output /dev/null
+          docker exec bus-checker-smoke node -e "if (process.getuid() !== 1000) process.exit(1)"
+          test "$(docker exec bus-checker-smoke node --version)" = "v$(cat .node-version)"
+          python3 -c 'import json; print(json.dumps({"padding": "x" * 512000}))' > /tmp/oversized.json
+          for endpoint in direct-routes favourite-route-stops; do
+            status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              --header 'Content-Type: application/json' --header 'Transfer-Encoding: chunked' \
+              --data-binary @/tmp/oversized.json "http://127.0.0.1:3000/api/$endpoint")
+            test "$status" = 413
+          done

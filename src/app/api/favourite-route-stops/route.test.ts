@@ -15,6 +15,14 @@ import type { FavouriteRouteStop } from '@/lib/types';
 afterEach(() => vi.clearAllMocks());
 
 describe('POST /api/favourite-route-stops', () => {
+  it('rejects oversized bodies before resolving metadata', async () => {
+    const response = await POST(new Request('http://localhost/api/favourite-route-stops', {
+      method: 'POST', body: JSON.stringify({ padding: 'x'.repeat(512_000) }),
+    }));
+    expect(response.status).toBe(413);
+    expect(getKmbFavouriteRouteStopMetadataMock).not.toHaveBeenCalled();
+  });
+
   it('accepts only exact normalized route-stop identities', async () => {
     getKmbFavouriteRouteStopMetadataMock.mockResolvedValue([]);
     const response = await POST(new Request('http://localhost/api/favourite-route-stops', {

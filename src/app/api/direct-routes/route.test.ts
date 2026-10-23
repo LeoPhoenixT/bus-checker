@@ -12,6 +12,13 @@ function request(body: unknown): Request {
 afterEach(() => vi.restoreAllMocks());
 
 describe('POST /api/direct-routes', () => {
+  it('rejects oversized bodies without trusting Content-Length', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    const response = await POST(request({ padding: 'x'.repeat(512_000) }));
+    expect(response.status).toBe(413);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('returns a successful empty result without loading topology when candidates are empty', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     const response = await POST(request({ originStops: [], destinationStops: ['DEST0001'] }));
