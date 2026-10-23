@@ -60,3 +60,12 @@ jobs:
               --data-binary @/tmp/oversized.json "http://127.0.0.1:3000/api/$endpoint")
             test "$status" = 413
           done
+          for attempt in $(seq 1 45); do
+            health=$(docker inspect --format '{{.State.Health.Status}}' bus-checker-smoke)
+            if [ "$health" = healthy ] || [ "$health" = unhealthy ]; then
+              break
+            fi
+            sleep 2
+          done
+          docker inspect --format '{{json .State.Health}}' bus-checker-smoke
+          test "$health" = healthy
