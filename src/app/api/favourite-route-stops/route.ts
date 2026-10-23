@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { normalizeFavouriteRouteStop } from '@/lib/favourites';
 import { getKmbFavouriteRouteStopMetadata, KmbRoutesError, KmbRouteStopsError } from '@/lib/server/kmbRoutes';
 import type { FavouriteRouteStop } from '@/lib/types';
+import { readBoundedJson, RequestBodyTooLargeError } from '@/lib/server/requestBody';
 
 const MAX_FAVOURITES_PER_REQUEST = 100;
 
@@ -12,8 +13,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export async function POST(request: Request) {
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
+    body = await readBoundedJson(request);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return NextResponse.json({ error: 'Request body is too large' }, { status: 413 });
+    }
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
   if (!isRecord(body) || !Array.isArray(body.items) || body.items.length > MAX_FAVOURITES_PER_REQUEST) {
