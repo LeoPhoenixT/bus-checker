@@ -1,29 +1,7 @@
 import type { RouteStop } from '@/lib/types';
-import { getKmbServiceDay } from './kmbServiceDay';
+import { createServiceDayCache } from './serviceDayCache';
 
 const KMB_ROUTE_STOPS_URL = 'https://data.etabus.gov.hk/v1/transport/kmb/route-stop';
-const REFRESH_FAILURE_BACKOFF_MS = 60_000;
-
-interface RouteStopSnapshot {
-  serviceDay: string;
-  routeStops: RouteStop[];
-}
-
-interface PendingRefresh {
-  serviceDay: string;
-  promise: Promise<RouteStop[]>;
-}
-
-interface FailedRefresh {
-  serviceDay: string;
-  retryAfter: number;
-  error: KmbRouteStopsError;
-}
-
-let snapshot: RouteStopSnapshot | null = null;
-let pendingRefresh: PendingRefresh | null = null;
-let failedRefresh: FailedRefresh | null = null;
-
 export class KmbRouteStopsError extends Error {
   retryAfterAt?: number;
 
@@ -93,65 +71,21 @@ async function loadKmbRouteStops(): Promise<RouteStop[]> {
   return normalized;
 }
 
+const routeStopsCache = createServiceDayCache({
+  load: loadKmbRouteStops,
+  toError: (error) => error instanceof KmbRouteStopsError
+    ? error
+    : new KmbRouteStopsError('Unable to refresh KMB route data', { cause: error }),
+  onFailure: (error) => console.error('KMB route-stop refresh failed', error),
+});
+
 export function fetchKmbRouteStops(now = new Date()): Promise<RouteStop[]> {
-  const serviceDay = getKmbServiceDay(now);
-  const nowMs = now.getTime();
-
-  if (snapshot?.serviceDay === serviceDay) return Promise.resolve(snapshot.routeStops);
-
-  // Never serve yesterday's topology after the daily refresh boundary.
-  if (snapshot && snapshot.serviceDay !== serviceDay) snapshot = null;
-
-  if (
-    failedRefresh?.serviceDay === serviceDay
-    && nowMs < failedRefresh.retryAfter
-  ) {
-    return Promise.reject(failedRefresh.error);
-  }
-
-  if (pendingRefresh?.serviceDay === serviceDay) return pendingRefresh.promise;
-
-  const refresh: PendingRefresh = {
-    serviceDay,
-    promise: Promise.resolve([]),
-  };
-  refresh.promise = loadKmbRouteStops()
-    .then((routeStops) => {
-      // A refresh from an older service day must not overwrite a newer job.
-      if (pendingRefresh === refresh) {
-        snapshot = { serviceDay, routeStops };
-        failedRefresh = null;
-      }
-      return routeStops;
-    })
-    .catch((error: unknown) => {
-      const routeError = error instanceof KmbRouteStopsError
-        ? error
-        : new KmbRouteStopsError('Unable to refresh KMB route data', { cause: error });
-      if (pendingRefresh === refresh) {
-        routeError.retryAfterAt = nowMs + REFRESH_FAILURE_BACKOFF_MS;
-        failedRefresh = {
-          serviceDay,
-          retryAfter: routeError.retryAfterAt,
-          error: routeError,
-        };
-        console.error('KMB route-stop refresh failed', routeError);
-      }
-      throw routeError;
-    })
-    .finally(() => {
-      if (pendingRefresh === refresh) pendingRefresh = null;
-    });
-
-  pendingRefresh = refresh;
-  return refresh.promise;
+  return routeStopsCache.get(now);
 }
 
 /** Reset process-local state between isolated unit tests. */
 export function resetKmbRouteStopsCacheForTests(): void {
-  snapshot = null;
-  pendingRefresh = null;
-  failedRefresh = null;
+  routeStopsCache.reset();
 }
 
-export { getKmbServiceDay };
+export { getKmbServiceDay } from './kmbServiceDay';
