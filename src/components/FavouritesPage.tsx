@@ -8,23 +8,15 @@ import { useFavourites } from '@/contexts/FavouriteContext';
 import { useLang } from '@/contexts/LanguageContext';
 import { useStopETAs } from '@/hooks/useStopETAs';
 import { fetchFavouriteRouteStopMetadata } from '@/lib/kmb';
+import { kmbRouteHref } from '@/lib/routeUrls';
 import { favouriteRouteStopKey } from '@/lib/favourites';
 import { getETAAgeSeconds } from '@/lib/etaFreshness';
-import { getMinutesUntil } from '@/lib/etaTime';
-import { getNullETAMessage } from '@/lib/etaPresentation';
+import { etaDisplayText, formatETAMinutes, getETAPredictions, getNullETAMessage } from '@/lib/etaPresentation';
 import { filterFavouriteRouteStopETAs } from '@/lib/routeEta';
 import type { ETAFreshness } from '@/lib/etaFreshness';
 import type { FavouriteRouteStop, FavouriteRouteStopMetadata } from '@/lib/types';
-import { LanguageToggle } from './LanguageToggle';
-import { PrimaryNavigation } from './PrimaryNavigation';
+import { PageHeader } from './PageHeader';
 import { RefreshIndicator } from './RefreshIndicator';
-import { ThemeToggle } from './ThemeToggle';
-
-function routeDetailHref(favourite: FavouriteRouteStop): string {
-  const params = new URLSearchParams({ bound: favourite.bound, serviceType: favourite.serviceType, stop: favourite.stopId });
-  if (favourite.boardingSeq !== undefined) params.set('seq', String(favourite.boardingSeq));
-  return `/routes/${encodeURIComponent(favourite.route)}?${params}`;
-}
 
 function ageLabel(date: Date | null, lang: 'en' | 'tc'): string | null {
   const seconds = getETAAgeSeconds(date);
@@ -76,18 +68,14 @@ function FavouriteCard({
     ? `Remove ${favourite.route} (${favourite.bound}/${favourite.serviceType}) ${boardingSeq === undefined ? '' : `stop ${boardingSeq} `}${stopLabel} favourite`
     : `移除 ${favourite.route}（${favourite.bound}/${favourite.serviceType}）${boardingSeq === undefined ? '' : `第 ${boardingSeq} 站 `}${stopLabel}收藏`;
   const nullEtaMessage = getNullETAMessage(etas, lang);
-  const arrivals = etas
-    .map((eta) => eta.eta ? getMinutesUntil(eta.eta) : null)
-    .filter((minutes): minutes is number => minutes !== null && minutes >= -1)
-    .filter((minutes, index, all) => all.indexOf(minutes) === index)
-    .slice(0, 3);
+  const arrivals = getETAPredictions(etas).slice(0, 3);
   const updated = ageLabel(lastSuccessfulAt, lang);
   const stale = freshness === 'stale' || freshness === 'very-stale' || freshness === 'unavailable';
 
   return (
     <article className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-sm">
       <div className="flex items-start gap-3">
-        <Link href={routeDetailHref(detailFavourite)} className="min-w-0 flex-1 rounded-lg outline-none transition hover:opacity-80 focus:ring-2 focus:ring-blue-500/60">
+        <Link href={kmbRouteHref(detailFavourite, { stopId: detailFavourite.stopId, boardingSeq: detailFavourite.boardingSeq })} className="min-w-0 flex-1 rounded-lg outline-none transition hover:opacity-80 focus:ring-2 focus:ring-blue-500/60">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xl font-bold tabular-nums text-[var(--foreground)]">{favourite.route}</span>
             {Number(favourite.serviceType) >= 2 && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">{lang === 'en' ? 'Special' : '特別班'}</span>}
@@ -127,12 +115,13 @@ function FavouriteCard({
           <p className="text-sm text-[var(--muted)]">{nullEtaMessage ?? (lang === 'en' ? 'No arrivals available' : '暫無班次資料')}</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {arrivals.map((minutes, index) => (
+            {arrivals.map(({ eta, minutes }, index) => (
               <span key={`${minutes}-${index}`} className={clsx(
                 'rounded-lg border px-2.5 py-1 text-sm font-bold tabular-nums',
                 stale ? 'border-[var(--divider)] bg-[var(--card-border)] text-[var(--muted)]' : 'border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300',
               )}>
-                {minutes <= 0 ? (lang === 'en' ? 'Arriving' : '即將到達') : `${minutes} ${lang === 'en' ? 'min' : '分'}`}
+                {formatETAMinutes(minutes, lang)}
+                {etaDisplayText(lang === 'en' ? eta.rmk_en : eta.rmk_tc) && ` (${etaDisplayText(lang === 'en' ? eta.rmk_en : eta.rmk_tc)})`}
               </span>
             ))}
           </div>
@@ -174,15 +163,9 @@ export function FavouritesPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-white/10 bg-gradient-to-r from-blue-700 via-blue-600 to-blue-700 shadow-xl">
-        <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2.5 text-white"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15"><Heart className="h-5 w-5" /></span><div><h1 className="text-lg font-bold leading-none">{lang === 'en' ? 'Favourites' : '收藏'}</h1><p className="mt-0.5 text-[11px] text-blue-100">{lang === 'en' ? 'Your usual boarding stops' : '你常用的上車站'}</p></div></div>
-            <div className="flex shrink-0 items-center gap-2"><LanguageToggle /><ThemeToggle /></div>
-          </div>
-          <PrimaryNavigation />
-        </div>
-      </header>
+      <PageHeader>
+        <div className="flex items-center gap-2.5 text-white"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15"><Heart className="h-5 w-5" /></span><div><h1 className="text-lg font-bold leading-none">{lang === 'en' ? 'Favourites' : '收藏'}</h1><p className="mt-0.5 text-[11px] text-blue-100">{lang === 'en' ? 'Your usual boarding stops' : '你常用的上車站'}</p></div></div>
+      </PageHeader>
       <main className="mx-auto max-w-2xl px-4 py-6 pb-24 sm:pb-6">
         {!hydrated ? (
           <div className="space-y-4" aria-label={lang === 'en' ? 'Loading favourites' : '正在載入收藏'}><div className="h-28 animate-pulse rounded-2xl bg-[var(--card-border)]" /><div className="h-28 animate-pulse rounded-2xl bg-[var(--card-border)]" /></div>

@@ -32,10 +32,12 @@ describe('getKmbRouteDetail', () => {
       return response(['REPEATED', 'UNIQUE'].map((stop) => ({ stop, name_en: stop, lat: 22.3, long: 114.1 })));
     });
     const legacy = { route: '10', bound: 'O' as const, serviceType: '1', stopId: 'REPEATED' };
-    const results = await getKmbFavouriteRouteStopMetadata([legacy, { ...legacy, boardingSeq: 1 }, { ...legacy, boardingSeq: 3 }, { ...legacy, boardingSeq: 99 }, { ...legacy, stopId: 'UNIQUE' }]);
-    expect(results.map((item) => item.status)).toEqual(['ambiguous', 'resolved', 'resolved', 'missing', 'resolved']);
-    expect(results.map((item) => item.stop?.seq)).toEqual([undefined, 1, 3, undefined, 2]);
+    const results = await getKmbFavouriteRouteStopMetadata([legacy, { ...legacy, boardingSeq: 1 }, { ...legacy, boardingSeq: 3 }, { ...legacy, boardingSeq: 99 }, { ...legacy, stopId: 'UNIQUE' }, { ...legacy, boardingSeq: 1 }]);
+    expect(results.map((item) => item.status)).toEqual(['ambiguous', 'resolved', 'resolved', 'missing', 'resolved', 'resolved']);
+    expect(results.map((item) => item.stop?.seq)).toEqual([undefined, 1, 3, undefined, 2, 1]);
     expect(results[0].favourite).toEqual(legacy);
+    expect(results[1].stop).toBe(results[5].stop);
+    expect(results[0].variant).toBe(results[1].variant);
   });
   it('uses the exact route, bound, and service type and returns stops in sequence order', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation((url: string | URL | Request) => {

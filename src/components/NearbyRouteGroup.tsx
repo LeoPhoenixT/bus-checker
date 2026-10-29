@@ -1,4 +1,5 @@
 'use client';
+import { kmbRouteHref } from '@/lib/routeUrls';
 
 import Link from 'next/link';
 import type { ComponentProps } from 'react';
@@ -39,10 +40,9 @@ export function NearbyRouteGroup({ container, ...etaState }: NearbyRouteGroupPro
         </summary>
         <div className="mt-2 flex flex-wrap gap-2">
           {container.variants.map((variant) => {
-            const params = new URLSearchParams({ bound: variant.bound, serviceType: variant.serviceType, stop: variant.boardingStopId, seq: String(variant.boardingSeq) });
             const label = lang === 'en' ? `Type ${variant.serviceType} · Stop ${variant.boardingSeq}` : `類型 ${variant.serviceType} · 第 ${variant.boardingSeq} 站`;
             return (
-              <Link key={nearbyVariantKey(variant)} href={`/routes/${encodeURIComponent(variant.route)}?${params}`} aria-label={lang === 'en' ? `View ${variant.route} ${label} route details` : `查看${variant.route}${label}路線詳情`} className="inline-flex min-h-11 items-center rounded-lg border border-[var(--divider)] px-3 py-2 text-xs text-[var(--foreground)] hover:bg-blue-500/10 focus-visible:ring-2 focus-visible:ring-blue-500">
+              <Link key={nearbyVariantKey(variant)} href={kmbRouteHref(variant, { stopId: variant.boardingStopId, boardingSeq: variant.boardingSeq })} aria-label={lang === 'en' ? `View ${variant.route} ${label} route details` : `查看${variant.route}${label}路線詳情`} className="inline-flex min-h-11 items-center rounded-lg border border-[var(--divider)] px-3 py-2 text-xs text-[var(--foreground)] hover:bg-blue-500/10 focus-visible:ring-2 focus-visible:ring-blue-500">
                 {label}
               </Link>
             );

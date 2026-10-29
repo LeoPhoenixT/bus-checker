@@ -34,6 +34,23 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('Citybus route detail', () => {
+  it('distinguishes a departed bus and keeps separate same-minute Citybus predictions and remarks', async () => {
+    const base = { co: 'CTB', route: '1', dir: 'O', seq: 1, stop: '000001', dest_en: 'Happy Valley', dest_tc: '跑馬地', dest_sc: '', rmk_en: '', rmk_tc: '', rmk_sc: '', data_timestamp: response.generated_timestamp };
+    fetchETA.mockResolvedValue({ generated_timestamp: response.generated_timestamp, data: [
+      { ...base, eta_seq: 1, eta: '2026-10-14T11:59:40+08:00' },
+      { ...base, eta_seq: 2, eta: '2026-10-14T12:02:30+08:00', rmk_tc: '原定班次' },
+      { ...base, eta_seq: 3, eta: '2026-10-14T12:02:50+08:00', rmk_tc: '特別服務' },
+    ] });
+    renderPage();
+    await waitFor(() => expect(screen.getAllByText('中環站')).toHaveLength(2));
+    fireEvent.click(screen.getAllByRole('button', { name: /中環站/ })[0]);
+    await waitFor(() => expect(screen.getByText('已離站')).toBeDefined());
+    expect(screen.getAllByText('2 分')).toHaveLength(2);
+    expect(screen.getByText('原定班次')).toBeDefined();
+    expect(screen.getByText('特別服務')).toBeDefined();
+    expect(screen.queryByText('即將到達')).toBeNull();
+  });
+
   it('shows directions and exact repeated occurrences, retains failed stops and has no favourite action', async () => {
     renderPage();
     await waitFor(() => expect(screen.getAllByText('中環站')).toHaveLength(2));
