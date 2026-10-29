@@ -9,8 +9,10 @@ const favourites: FavouriteRouteStop[] = Array.from({ length: 101 }, (_, index) 
 }));
 
 describe('fetchFavouriteRouteStopMetadata', () => {
-  it('keeps sequence-specific favourites in order across 100-item batches', async () => {
-    const items = favourites.map((favourite, index) => ({ ...favourite, boardingSeq: index + 1 }));
+  it('preserves legacy and sequence-specific favourites in order across 100-item batches', async () => {
+    const items = favourites.map((favourite, index) => (
+      index % 2 === 0 ? favourite : { ...favourite, boardingSeq: index + 1 }
+    ));
     const sizes: number[] = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, options) => {
       const body = JSON.parse(String(options?.body)) as { items: FavouriteRouteStop[] };
@@ -24,16 +26,6 @@ describe('fetchFavouriteRouteStopMetadata', () => {
   it('rejects incomplete metadata batches instead of silently dropping favourites', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ items: [] }));
     await expect(fetchFavouriteRouteStopMetadata([favourites[0]])).rejects.toThrow('Invalid favourites metadata response');
-  });
-  it('sends 101 favourites in API-sized batches and preserves all ordered results', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
-      const { items } = JSON.parse(String(init?.body)) as { items: FavouriteRouteStop[] };
-      expect(items.length).toBeLessThanOrEqual(100);
-      return new Response(JSON.stringify({ items: items.map((favourite) => ({ favourite, status: 'missing' })) }));
-    });
-    const result = await fetchFavouriteRouteStopMetadata(favourites);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(result.map((item) => item.favourite)).toEqual(favourites);
   });
 
   it('stops after an aborted batch instead of submitting the remaining favourites', async () => {
