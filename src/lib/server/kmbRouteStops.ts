@@ -1,7 +1,7 @@
 import type { RouteStop } from '@/lib/types';
 import { createServiceDayCache } from './serviceDayCache';
 
-const KMB_ROUTE_STOPS_URL = 'https://data.etabus.gov.hk/v1/transport/kmb/route-stop';
+const KMB_ROUTE_STOPS_URL = 'https://data.etabus.gov.hk/v1/transport/kmb/route-stop/';
 export class KmbRouteStopsError extends Error {
   retryAfterAt?: number;
 

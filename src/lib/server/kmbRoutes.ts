@@ -5,7 +5,7 @@ import { findReverseVariants, isSpecialService, normalizeRouteQuery, routeVarian
 import type { FavouriteRouteStop, FavouriteRouteStopMetadata, RouteDetail, RouteDetailStop, RouteStop, RouteVariant, Stop } from '@/lib/types';
 
 const ROUTES_URL = `${KMB_API_BASE}/route/`;
-const STOPS_URL = `${KMB_API_BASE}/stop`;
+const STOPS_URL = `${KMB_API_BASE}/stop/`;
 export class KmbRoutesError extends Error {
   retryAfterAt?: number;
 
