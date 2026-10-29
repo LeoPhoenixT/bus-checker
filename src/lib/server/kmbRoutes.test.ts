@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchKmbRouteVariants,
+  fetchKmbStops,
   getKmbRetryAfterSeconds,
   getKmbRouteDetail,
   getKmbFavouriteRouteStopMetadata,
@@ -20,11 +21,31 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+describe('fetchKmbStops', () => {
+  it('loads a cold snapshot through the trailing-slash endpoint and reuses it', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => (
+      String(url).endsWith('/stop/')
+        ? response([{ stop: 'STOPA', name_en: 'First Stop', name_tc: '第一站', lat: 22.3, long: 114.1 }])
+        : new Response('', { status: 403 })
+    ));
+    const now = new Date('2026-10-29T12:00:00.000Z');
+
+    const first = await fetchKmbStops(now);
+    expect(first[0]).toMatchObject({ stop: 'STOPA', name_en: 'First Stop' });
+    expect(await fetchKmbStops(now)).toBe(first);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://data.etabus.gov.hk/v1/transport/kmb/stop/',
+      expect.objectContaining({ cache: 'no-store', signal: expect.any(AbortSignal) }),
+    );
+  });
+});
+
 describe('getKmbRouteDetail', () => {
   it('resolves legacy single-occurrence favourites and keeps ambiguous legacy entries intact', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
       if (String(url).endsWith('/route/')) return response([{ route: '10', bound: 'O', service_type: '1', orig_en: 'A', dest_en: 'B' }]);
-      if (String(url).endsWith('/route-stop')) return response([
+      if (String(url).endsWith('/route-stop/')) return response([
         { route: '10', bound: 'O', service_type: '1', stop: 'REPEATED', seq: 1 },
         { route: '10', bound: 'O', service_type: '1', stop: 'UNIQUE', seq: 2 },
         { route: '10', bound: 'O', service_type: '1', stop: 'REPEATED', seq: 3 },
@@ -46,12 +67,12 @@ describe('getKmbRouteDetail', () => {
         { route: '87D', bound: 'O', service_type: '1', orig_en: 'Kam Ying Court', orig_tc: '錦英苑', dest_en: 'Hung Hom Station', dest_tc: '紅磡站' },
         { route: '87D', bound: 'I', service_type: '1', orig_en: 'Hung Hom Station', orig_tc: '紅磡站', dest_en: 'Kam Ying Court', dest_tc: '錦英苑' },
       ]));
-      if (value.endsWith('/route-stop')) return Promise.resolve(response([
+      if (value.endsWith('/route-stop/')) return Promise.resolve(response([
         { route: '87D', bound: 'O', service_type: '1', seq: 2, stop: 'STOPB' },
         { route: '87D', bound: 'O', service_type: '3', seq: 1, stop: 'STOPC' },
         { route: '87D', bound: 'O', service_type: '1', seq: 1, stop: 'STOPA' },
       ]));
-      if (value.endsWith('/stop')) return Promise.resolve(response([
+      if (value.endsWith('/stop/')) return Promise.resolve(response([
         { stop: 'STOPA', name_en: 'First Stop', name_tc: '第一站', lat: 22.3, long: 114.1 },
         { stop: 'STOPB', name_en: 'Second Stop', name_tc: '第二站', lat: 22.4, long: 114.2 },
         { stop: 'STOPC', name_en: 'Special Stop', name_tc: '特別站', lat: 22.5, long: 114.3 },
@@ -71,10 +92,10 @@ describe('getKmbRouteDetail', () => {
       if (value.endsWith('/route/')) return Promise.resolve(response([
         { route: '87D', bound: 'O', service_type: '3', orig_en: 'Town Centre', orig_tc: '市中心', dest_en: 'Hung Hom', dest_tc: '紅磡' },
       ]));
-      if (value.endsWith('/route-stop')) return Promise.resolve(response([
+      if (value.endsWith('/route-stop/')) return Promise.resolve(response([
         { route: '87D', bound: 'O', service_type: '1', seq: 1, stop: 'STOPA' },
       ]));
-      if (value.endsWith('/stop')) return Promise.resolve(response([
+      if (value.endsWith('/stop/')) return Promise.resolve(response([
         { stop: 'STOPA', name_en: 'First Stop', name_tc: '第一站', lat: 22.3, long: 114.1 },
       ]));
       throw new Error(`Unexpected URL: ${value}`);
@@ -89,11 +110,11 @@ describe('getKmbRouteDetail', () => {
       if (value.endsWith('/route/')) return Promise.resolve(response([
         { route: '87D', bound: 'O', service_type: '1', orig_en: 'A', dest_en: 'B' },
       ]));
-      if (value.endsWith('/route-stop')) return Promise.resolve(response([
+      if (value.endsWith('/route-stop/')) return Promise.resolve(response([
         { route: '87D', bound: 'O', service_type: '1', seq: 1, stop: 'EMPTY' },
         { route: '87D', bound: 'O', service_type: '1', seq: 2, stop: 'VALID' },
       ]));
-      if (value.endsWith('/stop')) return Promise.resolve(response([
+      if (value.endsWith('/stop/')) return Promise.resolve(response([
         { stop: 'EMPTY', name_en: 'Unknown location', lat: null, long: '' },
         { stop: 'VALID', name_en: 'Valid location', lat: '22.3', long: '114.1' },
       ]));
