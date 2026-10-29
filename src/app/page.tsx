@@ -14,13 +14,11 @@ import { getStopIds } from '@/lib/stopGroups';
 import { FilterBar } from '@/components/FilterBar';
 import { StopCard } from '@/components/StopCard';
 import { LocationPrompt } from '@/components/LocationPrompt';
-import { LanguageToggle } from '@/components/LanguageToggle';
-import { ThemeToggle } from '@/components/ThemeToggle';
+import { PageHeader } from '@/components/PageHeader';
 import { RefreshIndicator } from '@/components/RefreshIndicator';
 import { StopCardSkeleton } from '@/components/LoadingSkeleton';
 import { RadiusSelector } from '@/components/RadiusSelector';
 import { DestinationModal } from '@/components/DestinationModal';
-import { PrimaryNavigation } from '@/components/PrimaryNavigation';
 import type { DestinationSelection, Stop } from '@/lib/types';
 
 function BusCheckerApp() {
@@ -157,49 +155,41 @@ function BusCheckerApp() {
   return (
     <div className="min-h-screen">
       {/* ── Header ── */}
-      <header className="border-b border-white/10 bg-gradient-to-r from-blue-700 via-blue-600 to-blue-700 shadow-xl">
-        <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2.5 flex-1">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 flex-shrink-0">
-                <Bus className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold leading-none text-white tracking-tight">
-                  Bus Checker
-                </h1>
-                <p className="mt-0.5 flex items-center gap-1 text-[11px] text-blue-100">
-                  <Navigation className="h-3 w-3" />
-                  {lang === 'en' ? `KMB · ${radius} m radius` : `九巴 · 半徑 ${radius} 米`}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <LanguageToggle />
-              <ThemeToggle />
-            </div>
+      <PageHeader controls={
+        hasCoords && !geoError && (
+          <div className="flex items-center gap-3">
+            <RadiusSelector radius={radius} onChangeRadius={setRadius} />
+            <button
+              type="button"
+              onClick={refreshLocation}
+              disabled={geoLoading}
+              className="flex h-10 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:cursor-wait disabled:opacity-60"
+              aria-label={lang === 'en' ? 'Refresh current location' : '重新載入目前位置'}
+              title={lang === 'en' ? 'Refresh current location' : '重新載入目前位置'}
+            >
+              <RotateCw className={`h-4 w-4 ${geoLoading ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">
+                {lang === 'en' ? 'Reload location' : '重新定位'}
+              </span>
+            </button>
           </div>
-          {hasCoords && !geoError && (
-            <div className="flex items-center gap-3">
-              <RadiusSelector radius={radius} onChangeRadius={setRadius} />
-              <button
-                type="button"
-                onClick={refreshLocation}
-                disabled={geoLoading}
-                className="flex h-10 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:cursor-wait disabled:opacity-60"
-                aria-label={lang === 'en' ? 'Refresh current location' : '重新載入目前位置'}
-                title={lang === 'en' ? 'Refresh current location' : '重新載入目前位置'}
-              >
-                <RotateCw className={`h-4 w-4 ${geoLoading ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">
-                  {lang === 'en' ? 'Reload location' : '重新定位'}
-                </span>
-              </button>
-            </div>
-          )}
-          <PrimaryNavigation />
+        )
+      }>
+        <div className="flex items-center gap-2.5 flex-1">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 flex-shrink-0">
+            <Bus className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold leading-none text-white tracking-tight">
+              Bus Checker
+            </h1>
+            <p className="mt-0.5 flex items-center gap-1 text-[11px] text-blue-100">
+              <Navigation className="h-3 w-3" />
+              {lang === 'en' ? `KMB · ${radius} m radius` : `九巴 · 半徑 ${radius} 米`}
+            </p>
+          </div>
         </div>
-      </header>
+      </PageHeader>
 
       {/* ── Sticky Filter Bar (only when we have location) ── */}
       {hasCoords && !geoError && (
