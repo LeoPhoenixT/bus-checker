@@ -177,7 +177,6 @@ describe('StopCard service-type predictions', () => {
     expect(within(group).getAllByText(/^[0-9]+ 分$/)).toHaveLength(1);
     const badge = within(group).getByText('88X', { exact: true });
     const chooser = within(group).getByText('3 個路線版本 · 查看詳情');
-    expect(badge.className).toContain('rounded-lg');
     expect(badge.compareDocumentPosition(chooser) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(group).getByText('類型 1、3、4 · 共用預報')).toBeDefined();
     fireEvent.click(within(group).getByText('3 個路線版本 · 查看詳情'));

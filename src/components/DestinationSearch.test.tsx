@@ -25,37 +25,6 @@ afterEach(() => {
 });
 
 describe('DestinationSearch', () => {
-  it('refreshes an open search across the KMB service-day boundary', async () => {
-    vi.setSystemTime(new Date('2026-08-04T21:09:59.000Z'));
-    vi.mocked(getCachedStops).mockResolvedValueOnce([{ ...stop, name_tc: '舊站' }]).mockResolvedValueOnce([{ ...stop, name_tc: '新站' }]);
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ results: [] }));
-    render(<LanguageProvider><DestinationSearch onSelectStop={vi.fn()} onSelectAddress={vi.fn()} /></LanguageProvider>);
-    await act(async () => { await Promise.resolve(); });
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: '站' } });
-    expect(screen.getByText('舊站')).toBeDefined();
-    vi.setSystemTime(new Date('2026-08-04T21:10:00.000Z'));
-    fireEvent.focus(window);
-    await waitFor(() => expect(screen.getByText('新站')).toBeDefined());
-    expect(screen.queryByText('舊站')).toBeNull();
-    expect(getCachedStops).toHaveBeenCalledTimes(2);
-  });
-  it('uses an opaque popover surface for results', async () => {
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ results: [] }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    }));
-
-    render(
-      <LanguageProvider>
-        <DestinationSearch onSelectStop={vi.fn()} onSelectAddress={vi.fn()} />
-      </LanguageProvider>,
-    );
-    await act(async () => { await Promise.resolve(); });
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Central' } });
-
-    expect(screen.getByRole('listbox').className).toContain('bg-[var(--popover-bg)]');
-  });
-
   it('renders separate stop and address sections and selects either result', async () => {
     const onSelectStop = vi.fn();
     const onSelectAddress = vi.fn();

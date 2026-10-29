@@ -87,6 +87,22 @@ afterEach(() => {
 });
 
 describe('RouteDetailPage', () => {
+  it('shows separate same-minute services with remarks and labels a recent departure correctly', async () => {
+    fetchRouteDetailMock.mockResolvedValue(detail());
+    fetchStopETAsMock.mockResolvedValue(response([
+      eta({ eta: '2026-09-11T11:59:40Z' }),
+      eta({ eta_seq: 2, eta: '2026-09-11T12:02:30Z', rmk_tc: '原定班次' }),
+      eta({ eta_seq: 3, eta: '2026-09-11T12:02:50Z', rmk_tc: '特別服務' }),
+    ]));
+    renderPage();
+    await waitFor(() => expect(screen.getByText('第一站')).toBeDefined());
+    fireEvent.click(screen.getByRole('button', { name: /第一站/ }));
+    await waitFor(() => expect(screen.getByText('已離站')).toBeDefined());
+    expect(screen.getByText('2 分 (原定班次)')).toBeDefined();
+    expect(screen.getByText('2 分 (特別服務)')).toBeDefined();
+    expect(screen.queryByText('即將到達')).toBeNull();
+  });
+
   it('does not guess an occurrence for a legacy deep link and selects only the clicked row', async () => {
     const repeated = detail();
     repeated.stops.push({ ...repeated.stops[0], seq: 3, nameTc: '第一站回程' });
