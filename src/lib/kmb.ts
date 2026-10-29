@@ -1,3 +1,5 @@
+import { getJSON } from './client/http';
+export { RouteDetailRequestError } from './client/http';
 import type { FavouriteRouteStop, FavouriteRouteStopMetadata, RouteDetail, RouteSearchResult, StopListResponse, StopETAResponse } from './types';
 
 export async function fetchAllStops(): Promise<StopListResponse> {
@@ -8,16 +10,6 @@ export async function fetchAllStops(): Promise<StopListResponse> {
 
 export interface FetchStopETAOptions {
   signal?: AbortSignal;
-}
-
-export class RouteDetailRequestError extends Error {
-  constructor(
-    readonly status: number,
-    readonly retryAfterSeconds: number | null,
-  ) {
-    super(`Failed to fetch route detail: ${status}`);
-    this.name = 'RouteDetailRequestError';
-  }
 }
 
 export async function fetchStopETAs(
@@ -43,14 +35,7 @@ export async function fetchRouteDetail(
   { signal }: FetchStopETAOptions = {},
 ): Promise<RouteDetail> {
   const params = new URLSearchParams({ bound, serviceType });
-  const res = await fetch(`/api/routes/${encodeURIComponent(route)}?${params}`, { signal });
-  if (!res.ok) {
-    const header = res.headers.get('Retry-After');
-    const seconds = header !== null && /^\d+$/.test(header) ? Number(header) : NaN;
-    const retryAfterSeconds = Number.isSafeInteger(seconds) && seconds > 0 && seconds <= 3600 ? seconds : null;
-    throw new RouteDetailRequestError(res.status, retryAfterSeconds);
-  }
-  return res.json() as Promise<RouteDetail>;
+  return getJSON(`/api/routes/${encodeURIComponent(route)}?${params}`, { signal });
 }
 
 export async function fetchFavouriteRouteStopMetadata(
