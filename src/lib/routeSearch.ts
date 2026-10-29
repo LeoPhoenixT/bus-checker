@@ -1,3 +1,4 @@
+import { citybusRouteHref, kmbRouteHref } from './routeUrls';
 import type { CitybusRoute } from './citybusTypes';
 import type { RouteVariant } from './types';
 import { compareRouteVariants } from './routeVariants';
@@ -42,10 +43,6 @@ export function routeSearchHref(query = '', filter: RouteOperatorFilter = 'all')
 }
 
 export function routeLookupHref(item: RouteLookup, query: string, filter: RouteOperatorFilter): string {
-  const params = item.operator === 'CTB'
-    ? new URLSearchParams({ operator: 'CTB' })
-    : new URLSearchParams({ bound: item.bound, serviceType: item.serviceType });
-  if (query) params.set('q', query);
-  if (filter !== 'all') params.set('filter', filter);
-  return `/routes/${encodeURIComponent(item.route)}?${params}`;
+  const context = { searchQuery: query, searchFilter: filter };
+  return item.operator === 'CTB' ? citybusRouteHref(item.route, undefined, context) : kmbRouteHref(item, context);
 }

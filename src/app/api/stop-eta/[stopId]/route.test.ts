@@ -9,6 +9,42 @@ afterEach(() => vi.restoreAllMocks());
 beforeEach(() => { vi.spyOn(console, 'error').mockImplementation(() => {}); });
 
 describe('GET /api/stop-eta/[stopId]', () => {
+  it('returns a controlled network failure', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Network unavailable'));
+    const response = await GET(new Request('http://localhost/api/stop-eta/ABCDEFGH'), context('ABCDEFGH'));
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: 'Unable to reach KMB ETA service' });
+  });
+
+  it('bounds upstream requests and returns a controlled timeout', async () => {
+    const timeoutController = new AbortController();
+    const timeoutMock = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeoutController.signal);
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_url, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+    }));
+    const pending = GET(new Request('http://localhost/api/stop-eta/ABCDEFGH'), context('ABCDEFGH'));
+    await Promise.resolve();
+    timeoutController.abort(new DOMException('Timed out', 'TimeoutError'));
+    expect((await pending).status).toBe(504);
+    expect(timeoutMock).toHaveBeenCalledWith(10_000);
+  });
+
+  it('propagates request cancellation to the upstream fetch', async () => {
+    const controller = new AbortController();
+    let upstreamSignal: AbortSignal | null | undefined;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_url, init) => {
+      upstreamSignal = init?.signal;
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+      });
+    });
+    const pending = GET(new Request('http://localhost/api/stop-eta/ABCDEFGH', { signal: controller.signal }), context('ABCDEFGH'));
+    await Promise.resolve();
+    controller.abort();
+    expect((await pending).status).toBe(502);
+    expect(upstreamSignal?.aborted).toBe(true);
+  });
+
   it.each([undefined, null, 0, -1, 1.5, '1'])('rejects an invalid or missing occurrence sequence: %j', async (seq) => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ data: [{ route: '10', dir: 'O', service_type: '1', seq, eta_seq: 1, eta: null }] }));
     const response = await GET(new Request('http://localhost/api/stop-eta/ABCDEFGH'), context('ABCDEFGH'));
@@ -43,7 +79,7 @@ describe('GET /api/stop-eta/[stopId]', () => {
     });
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/stop-eta/8CFD0DAAA2D9B47E'),
-      { cache: 'no-store' },
+      expect.objectContaining({ cache: 'no-store', signal: expect.any(AbortSignal) }),
     );
   });
 
