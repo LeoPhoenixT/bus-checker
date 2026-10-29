@@ -7,8 +7,8 @@ import { useLang } from '@/contexts/LanguageContext';
 import type { DestinationStopNames, ETAEntry, Stop } from '@/lib/types';
 import type { ETAFreshness } from '@/lib/etaFreshness';
 import { getETAAgeSeconds } from '@/lib/etaFreshness';
-import { getMinutesUntil } from '@/lib/etaTime';
-import { etaDisplayText, getNullETAMessage } from '@/lib/etaPresentation';
+import { kmbRouteHref } from '@/lib/routeUrls';
+import { etaDisplayText, formatETAMinutes, getETAPredictions, getNullETAMessage } from '@/lib/etaPresentation';
 
 interface ETARowProps {
   route: string;
@@ -74,8 +74,7 @@ export function ETARow({
   const first = etas[0];
   const dest = first ? (lang === 'en' ? first.dest_en : first.dest_tc) : '';
   const destPrefix = lang === 'en' ? 'To ' : '往 ';
-  const routeDetailParams = new URLSearchParams({ bound, serviceType, stop: boardingStopId, seq: String(boardingSeq) });
-  const routeDetailHref = `/routes/${encodeURIComponent(route)}?${routeDetailParams}`;
+  const routeDetailHref = kmbRouteHref({ route, bound, serviceType }, { stopId: boardingStopId, boardingSeq });
   const routeDetailLabel = (lang === 'en'
     ? `View ${route}${isSpecial ? ' special service' : ''} route details`
     : `查看${route}${isSpecial ? '特別班' : ''}路線詳情`) + (showBoardingSeq ? (lang === 'en' ? ` (stop ${boardingSeq})` : `（第 ${boardingSeq} 站）`) : '');
@@ -90,10 +89,7 @@ export function ETARow({
   }));
 
   // Compute minutes for each upcoming bus; filter out clearly departed
-  const times = [...etas].sort((a, b) => a.eta_seq - b.eta_seq)
-    .filter((eta): eta is ETAEntry & { eta: string } => eta.eta !== null)
-    .map((eta) => ({ minutes: getMinutesUntil(eta.eta), rmk_en: eta.rmk_en, rmk_tc: eta.rmk_tc }))
-    .filter((time) => time.minutes >= -1);
+  const times = getETAPredictions(etas).map(({ eta, minutes }) => ({ ...eta, minutes }));
   const nullEtaMessage = getNullETAMessage(etas, lang);
 
   const [nearest, ...later] = times.slice(0, 3);
@@ -247,12 +243,7 @@ export function ETARow({
           <p className="mt-0.5 flex flex-wrap gap-1.5">
             {later.map((t, i) => {
               const rmk = etaDisplayText(lang === 'en' ? t.rmk_en : t.rmk_tc);
-              const timeText =
-                t.minutes < 0
-                  ? departed
-                  : t.minutes === 0
-                    ? arrivingNow
-                    : `${t.minutes} ${timeUnit}`;
+              const timeText = formatETAMinutes(t.minutes, lang);
 
               return (
                 <span key={i} className="text-[11px] tabular-nums text-[var(--muted)]">

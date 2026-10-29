@@ -10,16 +10,14 @@ import { useStopETAs } from '@/hooks/useStopETAs';
 import { fetchRouteDetail, RouteDetailRequestError } from '@/lib/kmb';
 import { getETAAgeSeconds } from '@/lib/etaFreshness';
 import { filterRouteVariantETAs } from '@/lib/routeEta';
-import { getMinutesUntil } from '@/lib/etaTime';
-import { getNullETAMessage } from '@/lib/etaPresentation';
+import { etaDisplayText, formatETAMinutes, getETAPredictions, getNullETAMessage } from '@/lib/etaPresentation';
 import type { ETAEntry, FavouriteRouteStop, RouteDetail, RouteDetailStop, RouteStopOccurrence, RouteVariant } from '@/lib/types';
+import { kmbRouteHref } from '@/lib/routeUrls';
 import { routeStopOccurrenceKey } from '@/lib/routeStopOccurrence';
 import { routeSearchHref as searchHref, type RouteOperatorFilter } from '@/lib/routeSearch';
-import { LanguageToggle } from './LanguageToggle';
-import { PrimaryNavigation } from './PrimaryNavigation';
+import { PageHeader } from './PageHeader';
 import { RefreshIndicator } from './RefreshIndicator';
 import { RouteMap } from './RouteMap';
-import { ThemeToggle } from './ThemeToggle';
 
 interface RouteDetailPageProps {
   route: string;
@@ -30,13 +28,6 @@ interface RouteDetailPageProps {
   /** A nearby-result deep link may preselect an exact boarding stop. */
   initialStopId?: string;
   initialStopSeq?: number;
-}
-
-function routeDetailHref(variant: RouteVariant, searchQuery?: string, searchFilter: RouteOperatorFilter = 'all'): string {
-  const params = new URLSearchParams({ bound: variant.bound, serviceType: variant.serviceType });
-  if (searchQuery) params.set('q', searchQuery);
-  if (searchFilter !== 'all') params.set('filter', searchFilter);
-  return `/routes/${encodeURIComponent(variant.route)}?${params}`;
 }
 
 function names(variant: RouteVariant, lang: 'en' | 'tc'): { origin: string; destination: string } {
@@ -85,11 +76,7 @@ function SelectedStopETA({
   const liveETAs = filterRouteVariantETAs(etas, detail.variant, stop.stopId, stop.seq);
   const shouldHideTimes = freshness === 'very-stale' || freshness === 'unavailable';
   const nullEtaMessage = getNullETAMessage(liveETAs, lang);
-  const arrivals = liveETAs
-    .map((eta) => ({ eta, minutes: eta.eta ? getMinutesUntil(eta.eta) : null }))
-    .filter((item): item is { eta: ETAEntry; minutes: number } => item.minutes !== null && item.minutes >= -1)
-    .filter((item, index, all) => all.findIndex((candidate) => candidate.minutes === item.minutes) === index)
-    .slice(0, 3);
+  const arrivals = getETAPredictions(liveETAs).slice(0, 3);
   const updated = ageLabel(lastSuccessfulAt, lang);
   const status = loading && lastSuccessfulAt === null
     ? (lang === 'en' ? 'Loading ETA…' : '正在載入到站時間…')
@@ -128,7 +115,8 @@ function SelectedStopETA({
                   : 'border-blue-500/25 bg-[var(--card-bg)] text-blue-700 dark:text-blue-300',
               )}
             >
-              {minutes <= 0 ? (lang === 'en' ? 'Arriving' : '即將到達') : `${minutes} ${lang === 'en' ? 'min' : '分'}`}
+              {formatETAMinutes(minutes, lang)}
+              {etaDisplayText(lang === 'en' ? eta.rmk_en : eta.rmk_tc) && ` (${etaDisplayText(lang === 'en' ? eta.rmk_en : eta.rmk_tc)})`}
             </span>
           ))}
         </div>
@@ -232,21 +220,15 @@ export function RouteDetailPage({ route, bound, serviceType, searchQuery, search
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-white/10 bg-gradient-to-r from-blue-700 via-blue-600 to-blue-700 shadow-xl">
-        <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-4">
-          <div className="flex items-center justify-between gap-4">
-            <Link href={searchHref(searchQuery, searchFilter)} className="flex min-w-0 items-center gap-2.5 text-white transition-opacity hover:opacity-85">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15"><ArrowLeft className="h-5 w-5" /></span>
-              <span>
-                <span className="block text-lg font-bold leading-none tracking-tight">{route}</span>
-                <span className="mt-0.5 block text-[11px] text-blue-100">{lang === 'en' ? 'Route detail' : '路線詳情'}</span>
-              </span>
-            </Link>
-            <div className="flex shrink-0 items-center gap-2"><LanguageToggle /><ThemeToggle /></div>
-          </div>
-          <PrimaryNavigation />
-        </div>
-      </header>
+      <PageHeader>
+        <Link href={searchHref(searchQuery, searchFilter)} className="flex min-w-0 items-center gap-2.5 text-white transition-opacity hover:opacity-85">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15"><ArrowLeft className="h-5 w-5" /></span>
+          <span>
+            <span className="block text-lg font-bold leading-none tracking-tight">{route}</span>
+            <span className="mt-0.5 block text-[11px] text-blue-100">{lang === 'en' ? 'Route detail' : '路線詳情'}</span>
+          </span>
+        </Link>
+      </PageHeader>
 
       <main className="mx-auto max-w-2xl px-4 py-6 pb-24 sm:pb-6">
         {!detail && !error && (
@@ -277,7 +259,7 @@ export function RouteDetailPage({ route, bound, serviceType, searchQuery, search
               </div>
               <p className="mt-2 text-base font-semibold text-[var(--foreground)]">{names(detail.variant, lang).origin} <span className="px-1 text-[var(--muted)]">→</span> {names(detail.variant, lang).destination}</p>
               {detail.reverseVariants.length === 1 ? (
-                <Link href={routeDetailHref(detail.reverseVariants[0], searchQuery, searchFilter)} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-500/15 dark:text-blue-300">
+                <Link href={kmbRouteHref(detail.reverseVariants[0], { searchQuery, searchFilter })} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-500/15 dark:text-blue-300">
                   <RefreshCw className="h-4 w-4" />{lang === 'en' ? 'View reverse direction' : '查看反方向'}
                 </Link>
               ) : detail.reverseVariants.length > 1 ? (
@@ -287,7 +269,7 @@ export function RouteDetailPage({ route, bound, serviceType, searchQuery, search
                   </summary>
                   <div className="mt-2 overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--popover-bg)]">
                     {detail.reverseVariants.map((variant) => (
-                      <Link key={`${variant.route}|${variant.bound}|${variant.serviceType}`} href={routeDetailHref(variant, searchQuery, searchFilter)} className="block border-b border-[var(--divider)] px-3 py-3 text-sm last:border-b-0 hover:bg-blue-500/5">
+                      <Link key={`${variant.route}|${variant.bound}|${variant.serviceType}`} href={kmbRouteHref(variant, { searchQuery, searchFilter })} className="block border-b border-[var(--divider)] px-3 py-3 text-sm last:border-b-0 hover:bg-blue-500/5">
                         <span className="font-semibold text-[var(--foreground)]">{names(variant, lang).origin} → {names(variant, lang).destination}</span>
                         {variant.isSpecial && <span className="ml-2 text-xs text-amber-700 dark:text-amber-300">{lang === 'en' ? 'Special' : '特別班'}</span>}
                       </Link>

@@ -5,17 +5,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Bus, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { useLang } from '@/contexts/LanguageContext';
 import { fetchCitybusRouteDetail } from '@/lib/routes';
-import { RouteDetailRequestError } from '@/lib/kmb';
+import { RouteDetailRequestError } from '@/lib/client/http';
+import { citybusRouteHref } from '@/lib/routeUrls';
 import { routeSearchHref, type RouteOperatorFilter } from '@/lib/routeSearch';
 import { routeStopOccurrenceKey } from '@/lib/routeStopOccurrence';
-import { getMinutesUntil } from '@/lib/etaTime';
-import { getNullETAMessage } from '@/lib/etaPresentation';
+import { formatETAMinutes, getETAPredictions, getNullETAMessage } from '@/lib/etaPresentation';
 import { getETAAgeSeconds } from '@/lib/etaFreshness';
 import { useCitybusRouteETA } from '@/hooks/useCitybusRouteETA';
 import type { CitybusBound, CitybusRouteDetail } from '@/lib/citybusTypes';
-import { LanguageToggle } from './LanguageToggle';
-import { ThemeToggle } from './ThemeToggle';
-import { PrimaryNavigation } from './PrimaryNavigation';
+import { PageHeader } from './PageHeader';
 import { RouteMap } from './RouteMap';
 
 interface Props {
@@ -68,8 +66,7 @@ export function CitybusRouteDetailPage({ route, bound, searchQuery = '', searchF
   const occurrences = detail?.stops.map((item) => item.status === 'resolved' ? item.stop : item) ?? [];
   const selectedStop = occurrences.find((item) => routeStopOccurrenceKey(item) === selectedKey) ?? null;
   const eta = useCitybusRouteETA(route, detail?.variant.bound, selectedStop);
-  const arrivals = eta.data.map((row) => ({ row, minutes: row.eta ? getMinutesUntil(row.eta) : null }))
-    .filter((item): item is { row: typeof eta.data[number]; minutes: number } => item.minutes !== null && item.minutes >= -1).slice(0, 3);
+  const arrivals = getETAPredictions(eta.data).slice(0, 3);
   const notice = getNullETAMessage(eta.data, lang);
   const hidesTimes = eta.freshness === 'very-stale' || eta.freshness === 'unavailable';
   const age = getETAAgeSeconds(eta.dataTime, clock);
@@ -78,25 +75,14 @@ export function CitybusRouteDetailPage({ route, bound, searchQuery = '', searchF
       : `資料於 ${age < 60 ? `${age} 秒` : `${Math.floor(age / 60)} 分鐘`}前更新`;
   const missingMetadata = detail?.stops.some((item) => item.status !== 'resolved');
   const retrySeconds = Math.max(0, Math.ceil((retryAt - clock) / 1000));
-  const directionHref = (direction: CitybusBound) => {
-    const params = new URLSearchParams({ operator: 'CTB', bound: direction });
-    if (searchQuery) params.set('q', searchQuery);
-    if (searchFilter !== 'all') params.set('filter', searchFilter);
-    return `/routes/${encodeURIComponent(route)}?${params}`;
-  };
+  const directionHref = (direction: CitybusBound) => citybusRouteHref(route, direction, { searchQuery, searchFilter });
 
   return <div className="min-h-screen">
-    <header className="border-b border-white/10 bg-gradient-to-r from-blue-700 via-blue-600 to-blue-700 shadow-xl">
-      <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-4">
-        <div className="flex items-center justify-between gap-4">
-          <Link href={routeSearchHref(searchQuery, searchFilter)} className="flex items-center gap-2.5 text-white">
-            <ArrowLeft className="h-5 w-5" /><span><span className="block text-lg font-bold">{route}</span><span className="text-xs">{lang === 'en' ? 'Citybus · Route detail' : '城巴 · 路線詳情'}</span></span>
-          </Link>
-          <div className="flex gap-2"><LanguageToggle /><ThemeToggle /></div>
-        </div>
-        <PrimaryNavigation />
-      </div>
-    </header>
+    <PageHeader>
+      <Link href={routeSearchHref(searchQuery, searchFilter)} className="flex items-center gap-2.5 text-white">
+        <ArrowLeft className="h-5 w-5" /><span><span className="block text-lg font-bold">{route}</span><span className="text-xs">{lang === 'en' ? 'Citybus · Route detail' : '城巴 · 路線詳情'}</span></span>
+      </Link>
+    </PageHeader>
     <main className="mx-auto max-w-2xl px-4 py-6 pb-24">
       {!detail && !error && <p role="status" className="py-16 text-center text-[var(--muted)]">{lang === 'en' ? 'Loading Citybus route…' : '正在載入城巴路線…'}</p>}
       {error && <div className="space-y-4 py-16 text-center">
@@ -133,7 +119,7 @@ export function CitybusRouteDetailPage({ route, bound, searchQuery = '', searchF
                 {selected && <div className="space-y-2 px-4 pb-4 sm:pl-16" aria-live="polite">
                   {eta.loading && !eta.lastSuccessfulAt ? <p>{lang === 'en' ? 'Loading ETA…' : '正在載入到站時間…'}</p> : <>
                     {(eta.error || hidesTimes || eta.freshness === 'stale') && <p className="text-sm text-amber-700 dark:text-amber-300">{eta.error ? (lang === 'en' ? 'Unable to refresh ETA.' : '暫未能更新到站時間。') : hidesTimes ? (lang === 'en' ? 'Live ETA unavailable.' : '暫未能提供即時到站時間。') : (lang === 'en' ? 'ETA may be outdated.' : '到站時間可能已過時。')}</p>}
-                    {!hidesTimes && arrivals.map(({ row, minutes }) => <p key={row.eta_seq} className="font-semibold"><span className="text-xl tabular-nums text-blue-700 dark:text-blue-300">{minutes <= 0 ? (lang === 'en' ? 'Arriving' : '即將到達') : `${minutes} ${lang === 'en' ? 'min' : '分'}`}</span>{' '}{lang === 'en' ? row.rmk_en : row.rmk_tc}</p>)}
+                    {!hidesTimes && arrivals.map(({ eta: row, minutes }) => <p key={row.eta_seq} className="font-semibold"><span className="text-xl tabular-nums text-blue-700 dark:text-blue-300">{formatETAMinutes(minutes, lang)}</span>{' '}{lang === 'en' ? row.rmk_en : row.rmk_tc}</p>)}
                     {notice && <p className="text-sm">{notice}</p>}
                     {!arrivals.length && !notice && !hidesTimes && <p className="text-sm">{lang === 'en' ? 'No live prediction' : '暫無即時預報'}</p>}
                     {eta.lastSuccessfulAt && <p className="text-xs text-[var(--muted)]">{ageText}</p>}

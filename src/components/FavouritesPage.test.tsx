@@ -47,6 +47,20 @@ beforeEach(() => {
 afterEach(() => { cleanup(); localStorage.clear(); vi.clearAllMocks(); });
 
 describe('FavouritesPage', () => {
+  it('keeps same-minute services and remarks alongside a recently departed bus', async () => {
+    fetchFavouriteRouteStopMetadataMock.mockResolvedValue([metadata(first)]);
+    fetchStopETAsMock.mockResolvedValue({ type: 'ETA', version: '1', generated_timestamp: '', data: [
+      eta({ eta: new Date(Date.now() - 20_000).toISOString() }),
+      eta({ eta_seq: 2, eta: new Date(Date.now() + 150_000).toISOString(), rmk_tc: '原定班次' }),
+      eta({ eta_seq: 3, eta: new Date(Date.now() + 170_000).toISOString(), rmk_tc: '特別服務' }),
+    ] });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('已離站')).toBeDefined());
+    expect(screen.getByText('2 分 (原定班次)')).toBeDefined();
+    expect(screen.getByText('2 分 (特別服務)')).toBeDefined();
+    expect(screen.queryByText('即將到達')).toBeNull();
+  });
+
   it('retains ambiguous legacy favourites and asks for a sequence without showing mixed ETAs', async () => {
     fetchFavouriteRouteStopMetadataMock.mockResolvedValue([{ favourite: first, status: 'ambiguous' }]);
     renderPage();

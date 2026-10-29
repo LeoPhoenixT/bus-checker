@@ -7,9 +7,7 @@ import { useLang } from '@/contexts/LanguageContext';
 import { normalizeRouteQuery } from '@/lib/routeVariants';
 import { useRouteSearch } from '@/hooks/useRouteSearch';
 import { isRouteOperatorFilter, routeLookupHref, routeLookupKey, routeSearchHref, type RouteLookup, type RouteOperator, type RouteOperatorFilter } from '@/lib/routeSearch';
-import { LanguageToggle } from './LanguageToggle';
-import { PrimaryNavigation } from './PrimaryNavigation';
-import { ThemeToggle } from './ThemeToggle';
+import { PageHeader } from './PageHeader';
 
 function variantName(variant: RouteLookup, lang: 'en' | 'tc'): { origin: string; destination: string } {
   return lang === 'en'
@@ -39,26 +37,17 @@ export function RouteSearchPage({ initialQuery = '', initialFilter = 'all' }: { 
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-white/10 bg-gradient-to-r from-blue-700 via-blue-600 to-blue-700 shadow-xl">
-        <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15">
-                <Bus className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold leading-none tracking-tight text-white">Bus Checker</h1>
-                <p className="mt-0.5 text-[11px] text-blue-100">{lang === 'en' ? 'KMB & Citybus route lookup' : '九巴及城巴路線查詢'}</p>
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <LanguageToggle />
-              <ThemeToggle />
-            </div>
+      <PageHeader>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15">
+            <Bus className="h-5 w-5 text-white" />
           </div>
-          <PrimaryNavigation />
+          <div>
+            <h1 className="text-lg font-bold leading-none tracking-tight text-white">Bus Checker</h1>
+            <p className="mt-0.5 text-[11px] text-blue-100">{lang === 'en' ? 'KMB & Citybus route lookup' : '九巴及城巴路線查詢'}</p>
+          </div>
         </div>
-      </header>
+      </PageHeader>
 
       <main className="mx-auto max-w-2xl px-4 py-6 pb-24 sm:pb-6">
         <h2 className="text-xl font-bold text-[var(--foreground)]">{lang === 'en' ? 'Route search' : '路線搜尋'}</h2>
