@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SearchStateProvider } from '@/contexts/SearchStateContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { FavouriteProvider } from '@/contexts/FavouriteContext';
 import { FAVOURITES_STORAGE_KEY } from '@/lib/favourites';
@@ -67,7 +68,7 @@ function response(data: ETAEntry[]) {
 function renderPage() {
   return render(
     <ThemeProvider>
-      <FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" /></LanguageProvider></FavouriteProvider>
+      <FavouriteProvider><SearchStateProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" /></LanguageProvider></SearchStateProvider></FavouriteProvider>
     </ThemeProvider>,
   );
 }
@@ -108,7 +109,7 @@ describe('RouteDetailPage', () => {
     repeated.stops.push({ ...repeated.stops[0], seq: 3, nameTc: '第一站回程' });
     fetchRouteDetailMock.mockResolvedValue(repeated);
     fetchStopETAsMock.mockResolvedValue(response([eta(), eta({ seq: 3, eta_seq: 2, eta: '2026-09-11T12:08:00.000Z' })]));
-    render(<ThemeProvider><FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="STOP1" /></LanguageProvider></FavouriteProvider></ThemeProvider>);
+    render(<ThemeProvider><FavouriteProvider><SearchStateProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="STOP1" /></LanguageProvider></SearchStateProvider></FavouriteProvider></ThemeProvider>);
     await waitFor(() => expect(screen.getByText('此站在路線中出現多次，請選擇你要上車的站序。')).toBeDefined());
     expect(fetchStopETAsMock).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /第一站回程/ }));
@@ -124,11 +125,11 @@ describe('RouteDetailPage', () => {
     repeated.stops.push({ ...repeated.stops[0], seq: 3, nameTc: '第一站回程' });
     fetchRouteDetailMock.mockResolvedValue(repeated);
     fetchStopETAsMock.mockResolvedValue(response([]));
-    const { rerender } = render(<ThemeProvider><FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="STOP1" initialStopSeq={3} /></LanguageProvider></FavouriteProvider></ThemeProvider>);
+    const { rerender } = render(<ThemeProvider><FavouriteProvider><SearchStateProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="STOP1" initialStopSeq={3} /></LanguageProvider></SearchStateProvider></FavouriteProvider></ThemeProvider>);
     await waitFor(() => expect(screen.getByRole('button', { name: /第一站回程/ }).getAttribute('aria-expanded')).toBe('true'));
     expect(screen.getByText('第一站').closest('button')?.getAttribute('aria-expanded')).toBe('false');
     fetchStopETAsMock.mockClear();
-    rerender(<ThemeProvider><FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="STOP1" initialStopSeq={99} /></LanguageProvider></FavouriteProvider></ThemeProvider>);
+    rerender(<ThemeProvider><FavouriteProvider><SearchStateProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="STOP1" initialStopSeq={99} /></LanguageProvider></SearchStateProvider></FavouriteProvider></ThemeProvider>);
     await waitFor(() => expect(screen.getByRole('button', { name: /第一站回程/ }).getAttribute('aria-expanded')).toBe('false'));
     expect(fetchStopETAsMock.mock.calls.every(([, options]) => options.signal.aborted)).toBe(true);
   });
@@ -166,7 +167,7 @@ describe('RouteDetailPage', () => {
     fetchStopETAsMock.mockResolvedValue(response([eta({ stop: 'STOP2', seq: 2 })]));
     render(
       <ThemeProvider>
-        <FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="stop2" /></LanguageProvider></FavouriteProvider>
+        <FavouriteProvider><SearchStateProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="stop2" /></LanguageProvider></SearchStateProvider></FavouriteProvider>
       </ThemeProvider>,
     );
 
@@ -203,7 +204,7 @@ describe('RouteDetailPage', () => {
     fetchRouteDetailMock.mockResolvedValue(detail());
     render(
       <ThemeProvider>
-        <FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="NOT-ON-THIS-VARIANT" /></LanguageProvider></FavouriteProvider>
+        <FavouriteProvider><SearchStateProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="NOT-ON-THIS-VARIANT" /></LanguageProvider></SearchStateProvider></FavouriteProvider>
       </ThemeProvider>,
     );
 
@@ -216,7 +217,7 @@ describe('RouteDetailPage', () => {
     fetchRouteDetailMock.mockResolvedValue(detail());
     fetchStopETAsMock.mockResolvedValue(response([]));
     const { rerender } = render(
-      <ThemeProvider><FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="STOP1" /></LanguageProvider></FavouriteProvider></ThemeProvider>,
+      <ThemeProvider><FavouriteProvider><SearchStateProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" initialStopId="STOP1" /></LanguageProvider></SearchStateProvider></FavouriteProvider></ThemeProvider>,
     );
     await waitFor(() => expect(screen.getByText('查看反方向')).toBeDefined());
     const reverseLink = screen.getByRole('link', { name: '查看反方向' });
@@ -226,7 +227,7 @@ describe('RouteDetailPage', () => {
     const alternate: RouteVariant = { ...reverseVariant, serviceType: '1', isSpecial: false, destinationTc: '錦英苑', destinationEn: 'Kam Ying Court' };
     fetchRouteDetailMock.mockResolvedValue(detail([reverseVariant, alternate]));
     rerender(
-      <ThemeProvider><FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="1" /></LanguageProvider></FavouriteProvider></ThemeProvider>,
+      <ThemeProvider><FavouriteProvider><SearchStateProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="1" /></LanguageProvider></SearchStateProvider></FavouriteProvider></ThemeProvider>,
     );
     await waitFor(() => expect(screen.getAllByText('查看反方向').some((element) => element.tagName === 'SUMMARY')).toBe(true));
     fireEvent.click(screen.getAllByText('查看反方向').find((element) => element.tagName === 'SUMMARY')!);
@@ -239,7 +240,7 @@ describe('RouteDetailPage', () => {
       .mockRejectedValueOnce(new RouteDetailRequestError(503, 3))
       .mockResolvedValueOnce(detail());
     render(
-      <ThemeProvider><FavouriteProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" searchQuery="87" /></LanguageProvider></FavouriteProvider></ThemeProvider>,
+      <ThemeProvider><FavouriteProvider><SearchStateProvider><LanguageProvider><RouteDetailPage route="87D" bound="O" serviceType="3" searchQuery="87" /></LanguageProvider></SearchStateProvider></FavouriteProvider></ThemeProvider>,
     );
     await waitFor(() => expect(screen.getByText('暫時無法載入路線資料')).toBeDefined());
     expect(screen.getByRole('link', { name: '返回路線搜尋' }).getAttribute('href')).toBe('/routes?q=87');

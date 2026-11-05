@@ -1,11 +1,15 @@
 'use client';
-import { useState, useRef, type KeyboardEvent } from 'react';
+import { useRef, type KeyboardEvent } from 'react';
 import { Search, X, Plus, MapPin } from 'lucide-react';
 import clsx from 'clsx';
 import { useLang } from '@/contexts/LanguageContext';
 
 interface FilterBarProps {
   filters: string[];
+  inputValue: string;
+  onInputChange: (value: string) => void;
+  showRoutesWithoutETA: boolean;
+  onShowRoutesWithoutETAChange: (value: boolean) => void;
   onAdd: (route: string) => void;
   onRemove: (route: string) => void;
   onClear: () => void;
@@ -19,6 +23,10 @@ interface FilterBarProps {
 
 export function FilterBar({
   filters,
+  inputValue,
+  onInputChange,
+  showRoutesWithoutETA,
+  onShowRoutesWithoutETAChange,
   onAdd,
   onRemove,
   onClear,
@@ -29,7 +37,6 @@ export function FilterBar({
   onClearDestination,
 }: FilterBarProps) {
   const { lang } = useLang();
-  const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const commit = () => {
@@ -37,7 +44,7 @@ export function FilterBar({
     if (val && !filters.includes(val)) {
       onAdd(val);
     }
-    setInputValue('');
+    onInputChange('');
     inputRef.current?.focus();
   };
 
@@ -57,6 +64,16 @@ export function FilterBar({
   return (
     <div className="sticky top-0 z-10 border-b border-[var(--card-border)] bg-[var(--background)]/95 backdrop-blur-md px-4 py-3 shadow-sm">
       <div className="mx-auto max-w-2xl">
+        <label className="mb-3 flex min-h-8 cursor-pointer items-center gap-2 text-sm text-[var(--foreground)]">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={showRoutesWithoutETA}
+            onChange={(event) => onShowRoutesWithoutETAChange(event.target.checked)}
+            className="h-4 w-4 accent-blue-600"
+          />
+          {lang === 'en' ? 'Show routes without ETA' : '顯示沒有到站時間的路線'}
+        </label>
         <div className="relative flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--muted)]" />
@@ -64,7 +81,7 @@ export function FilterBar({
               ref={inputRef}
               type="text"
               value={inputValue}
-              onChange={(e) => setInputValue(e.target.value.toUpperCase())}
+              onChange={(e) => onInputChange(e.target.value.toUpperCase())}
               onKeyDown={handleKeyDown}
               placeholder={lang === 'en' ? 'Route number… (e.g. 74B)' : '路線號碼… (例如 74B)'}
               className={clsx(

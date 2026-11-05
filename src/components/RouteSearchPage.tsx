@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Bus, ChevronRight, Search, X } from 'lucide-react';
 import { useLang } from '@/contexts/LanguageContext';
+import { useSearchState, type RouteSearchState } from '@/contexts/SearchStateContext';
 import { normalizeRouteQuery } from '@/lib/routeVariants';
 import { useRouteSearch } from '@/hooks/useRouteSearch';
 import { isRouteOperatorFilter, routeLookupHref, routeLookupKey, routeSearchHref, type RouteLookup, type RouteOperator, type RouteOperatorFilter } from '@/lib/routeSearch';
@@ -17,14 +18,32 @@ function variantName(variant: RouteLookup, lang: 'en' | 'tc'): { origin: string;
 
 export function RouteSearchPage({ initialQuery = '', initialFilter = 'all' }: { initialQuery?: string; initialFilter?: RouteOperatorFilter }) {
   const { lang } = useLang();
+  const { setRouteSearch } = useSearchState();
   const [query, setQuery] = useState(() => normalizeRouteQuery(initialQuery));
   const [filter, setFilter] = useState<RouteOperatorFilter>(initialFilter);
   const { routes: results, truncated, loading, complete, sources } = useRouteSearch(query, filter);
+  // The URL is authoritative on entry, including an explicitly empty search.
+  // Tab links carry the remembered search instead of overriding deep links here.
   useEffect(() => {
-    window.history.replaceState(window.history.state, '', routeSearchHref(query, filter));
-  }, [query, filter]);
+    const params = new URL(window.location.href).searchParams;
+    const operator = params.get('operator');
+    // A navigation response can arrive after the user has already edited the URL.
+    if (normalizeRouteQuery(params.get('q') ?? '') !== normalizeRouteQuery(initialQuery)
+      || (isRouteOperatorFilter(operator) ? operator : 'all') !== initialFilter) return;
+    setQuery(normalizeRouteQuery(initialQuery));
+    setFilter(initialFilter);
+  }, [initialQuery, initialFilter]);
+  useEffect(() => {
+    setRouteSearch({ query, filter });
+  }, [query, filter, setRouteSearch]);
+  const updateSearch = (next: RouteSearchState) => {
+    setQuery(next.query);
+    setFilter(next.filter);
+    window.history.replaceState(window.history.state, '', routeSearchHref(next.query, next.filter));
+  };
   useEffect(() => {
     const restore = () => {
+      if (window.location.pathname !== '/routes') return;
       const params = new URL(window.location.href).searchParams;
       setQuery(normalizeRouteQuery(params.get('q') ?? ''));
       const operator = params.get('operator');
@@ -57,7 +76,7 @@ export function RouteSearchPage({ initialQuery = '', initialFilter = 'all' }: { 
 
         <div className="mt-4 flex gap-2" role="group" aria-label={lang === 'en' ? 'Bus operator' : '巴士公司'}>
           {(['all', 'KMB', 'CTB'] as const).map((value) => (
-            <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)}
+            <button key={value} type="button" aria-pressed={filter === value} onClick={() => updateSearch({ query, filter: value })}
               className={`min-h-11 rounded-xl border px-4 py-2 text-sm font-semibold ${filter === value ? 'border-blue-500 bg-blue-500/10 text-blue-700 dark:text-blue-300' : 'border-[var(--card-border)] text-[var(--muted)]'}`}>
               {value === 'all' ? (lang === 'en' ? 'All' : '全部') : operatorName(value)}
             </button>
@@ -68,7 +87,7 @@ export function RouteSearchPage({ initialQuery = '', initialFilter = 'all' }: { 
           <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--muted)]" />
           <input
             value={query}
-            onChange={(event) => setQuery(normalizeRouteQuery(event.target.value))}
+            onChange={(event) => updateSearch({ query: normalizeRouteQuery(event.target.value), filter })}
             inputMode="text"
             autoCapitalize="characters"
             autoCorrect="off"
@@ -80,7 +99,7 @@ export function RouteSearchPage({ initialQuery = '', initialFilter = 'all' }: { 
           {query && (
             <button
               type="button"
-              onClick={() => setQuery('')}
+              onClick={() => updateSearch({ query: '', filter })}
               className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[var(--muted)] transition hover:bg-black/5 hover:text-[var(--foreground)] dark:hover:bg-white/10"
               aria-label={lang === 'en' ? 'Clear route search' : '清除路線搜尋'}
             >

@@ -168,6 +168,89 @@ describe('StopCard route list', () => {
   });
 });
 
+describe('StopCard routes without ETA toggle', () => {
+  it('filters remark-only, expired and invalid predictions before counting more routes', () => {
+    renderCard([
+      eta({ route: 'ENDED', eta: null, rmk_tc: '服務已結束' }),
+      eta({ route: 'SUSPENDED', eta: null, rmk_tc: '暫停服務' }),
+      eta({ route: 'EXPIRED', eta: new Date(Date.now() - 120_000).toISOString() }),
+      eta({ route: 'INVALID', eta: 'invalid' }),
+      ...Array.from({ length: 6 }, (_, index) => eta({ route: `R${index + 1}` })),
+    ], undefined, {}, { showRoutesWithoutETA: false });
+    expect(screen.queryByText('ENDED')).toBeNull();
+    expect(screen.queryByText('SUSPENDED')).toBeNull();
+    expect(screen.queryByText('EXPIRED')).toBeNull();
+    expect(screen.queryByText('INVALID')).toBeNull();
+    expect(screen.getAllByRole('link', { name: /查看R[0-9]路線詳情/ })).toHaveLength(5);
+    fireEvent.click(screen.getByRole('button', { name: '顯示其餘 1 條路線' }));
+    expect(screen.getAllByRole('link', { name: /查看R[0-9]路線詳情/ })).toHaveLength(6);
+  });
+
+  it('removes empty exact variants before creating a shared route container', () => {
+    renderCard([
+      eta({ eta: null, rmk_tc: '服務已結束' }),
+      eta({ service_type: '3', seq: 17 }),
+    ], undefined, {}, { showRoutesWithoutETA: false });
+    expect(screen.queryByText(/個路線版本/)).toBeNull();
+    expect(screen.queryByText('服務已結束')).toBeNull();
+    expect(screen.getByRole('link', { name: '查看88X特別班路線詳情' }).getAttribute('href'))
+      .toContain('serviceType=3');
+  });
+
+  it('keeps a variant with a usable prediction after null rows and retains the display cutoff', () => {
+    renderCard([
+      eta({ eta: null }),
+      eta({ eta_seq: 2, eta: new Date(Date.now() - 30_000).toISOString() }),
+    ], undefined, {}, { showRoutesWithoutETA: false });
+    expect(screen.getByText('88X')).toBeDefined();
+    expect(screen.getByText('已離站')).toBeDefined();
+  });
+
+  it('filters destination-only variants and explains an empty result even with a route filter', () => {
+    renderCard([], [match], {}, { routeFilters: ['88'], showRoutesWithoutETA: false });
+    expect(screen.queryByText('88X')).toBeNull();
+    expect(screen.getByText('起點')).toBeDefined();
+    expect(screen.getByText('暫無提供到站時間的路線')).toBeDefined();
+  });
+
+  it('preserves initial loading feedback while hiding destination-only variants', () => {
+    const { container } = renderCard([], [match], {}, { showRoutesWithoutETA: false, etasLoading: true });
+    expect(container.querySelectorAll('.animate-pulse')).toHaveLength(3);
+    expect(screen.queryByText('暫無提供到站時間的路線')).toBeNull();
+  });
+
+  it.each(['unavailable', 'very-stale'] as const)('preserves error feedback for %s ETA data', (freshness) => {
+    const upcoming = eta();
+    renderCard([upcoming], [match], {}, {
+      showRoutesWithoutETA: false,
+      routeFilters: ['88'],
+      etaStates: {
+        ORIGIN01: {
+          data: [upcoming], lastSuccessfulAt: freshness === 'unavailable' ? null : new Date(Date.now() - 301_000),
+          lastAttemptAt: new Date(), attemptStatus: 'error', error: 'offline', freshness,
+        },
+      },
+    });
+    expect(screen.queryByText('88X')).toBeNull();
+    expect(screen.getByText('暫未能取得到站時間')).toBeDefined();
+  });
+
+  it('keeps stale usable cached predictions when a refresh fails', () => {
+    const upcoming = eta();
+    renderCard([upcoming], undefined, {}, {
+      showRoutesWithoutETA: false,
+      etaStates: {
+        ORIGIN01: {
+          data: [upcoming], lastSuccessfulAt: new Date(Date.now() - 130_000),
+          lastAttemptAt: new Date(), attemptStatus: 'error', error: 'offline', freshness: 'stale',
+        },
+      },
+    });
+    expect(screen.getByText('88X')).toBeDefined();
+    expect(screen.getByText('到站時間可能已過時', { exact: false })).toBeDefined();
+  });
+});
+
 describe('StopCard service-type predictions', () => {
   const variants = () => [eta(), eta({ service_type: '3', seq: 17 }), eta({ service_type: '4', seq: 22 })];
 
