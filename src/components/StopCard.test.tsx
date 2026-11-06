@@ -53,6 +53,25 @@ function renderCard(
 }
 
 describe('StopCard destination eligibility', () => {
+  it.each(['loading', 'error', 'very-stale', 'success'] as const)(
+    'hides a known nonmatching destination stop during %s ETA state', (status) => {
+      const data = [eta()];
+      const { container } = renderCard(data, [match], {}, {
+        routeFilters: ['87D'],
+        etasLoading: status === 'loading',
+        etaStates: { ORIGIN01: {
+          data,
+          lastSuccessfulAt: status === 'loading' || status === 'error' ? null : new Date(Date.now() - (status === 'very-stale' ? 301_000 : 0)),
+          lastAttemptAt: new Date(),
+          attemptStatus: status === 'very-stale' ? 'error' : status,
+          error: status === 'error' || status === 'very-stale' ? 'offline' : null,
+          freshness: status === 'loading' || status === 'error' ? 'unavailable' : status === 'very-stale' ? 'very-stale' : 'fresh',
+        } },
+      });
+      expect(container.querySelector('article')).toBeNull();
+    },
+  );
+
   it('shows separate boarding passes with links and alighting points for each sequence', () => {
     renderCard([eta({ seq: 5 }), eta({ seq: 23 })], [match, { ...match, boardingSeq: 23, alightingStop: 'DEST0002', alightingSeq: 30 }]);
     expect(screen.getByText('於第 5 站上車')).toBeDefined();
@@ -214,7 +233,7 @@ describe('StopCard routes without ETA toggle', () => {
   });
 
   it('preserves initial loading feedback while hiding destination-only variants', () => {
-    const { container } = renderCard([], [match], {}, { showRoutesWithoutETA: false, etasLoading: true });
+    const { container } = renderCard([], [match], {}, { routeFilters: ['88'], showRoutesWithoutETA: false, etasLoading: true });
     expect(container.querySelectorAll('.animate-pulse')).toHaveLength(3);
     expect(screen.queryByText('暫無提供到站時間的路線')).toBeNull();
   });

@@ -5,10 +5,13 @@ import Home from '@/app/page';
 import { AppProviders } from './AppProviders';
 import { PrimaryNavigation } from './PrimaryNavigation';
 import { RouteSearchPage } from './RouteSearchPage';
-import { isRouteOperatorFilter } from '@/lib/routeSearch';
+import { installNavigationHistory } from '@/test-utils/navigation';
 
 const navigation = vi.hoisted(() => ({ pathname: '/' }));
-vi.mock('next/navigation', () => ({ usePathname: () => navigation.pathname }));
+vi.mock('next/navigation', async () => ({
+  usePathname: () => navigation.pathname,
+  useSearchParams: (await import('@/test-utils/navigation')).useTestSearchParams,
+}));
 vi.mock('next/link', () => ({
   default: ({ href, children, ...props }: React.ComponentProps<'a'>) => (
     <a href={href} {...props} onClick={(event) => {
@@ -43,10 +46,9 @@ function TestApp() {
   }, []);
   const url = new URL(href);
   navigation.pathname = url.pathname;
-  const operator = url.searchParams.get('operator');
   return <AppProviders>
     {url.pathname === '/' ? <Home /> : url.pathname === '/routes'
-      ? <RouteSearchPage initialQuery={url.searchParams.get('q') ?? ''} initialFilter={isRouteOperatorFilter(operator) ? operator : 'all'} />
+      ? <RouteSearchPage />
       : <><p>{url.pathname.startsWith('/routes/') ? '路線詳情測試頁' : '收藏測試頁'}</p><PrimaryNavigation /></>}
   </AppProviders>;
 }
@@ -64,10 +66,38 @@ function queryInput() {
   return screen.getByRole<HTMLInputElement>('textbox', { name: '搜尋路線號碼' });
 }
 
-beforeEach(() => { window.history.replaceState({}, '', '/'); });
-afterEach(cleanup);
+beforeEach(() => {
+  window.history.replaceState({}, '', '/');
+  installNavigationHistory();
+});
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe('tab search persistence', () => {
+  it.each(['all', 'KMB'] as const)('restores edited URL state after Favourites and browser Back with %s operator', async (filter) => {
+    render(<TestApp />);
+    clickTab('路線');
+    fireEvent.change(queryInput(), { target: { value: '87D' } });
+    if (filter === 'KMB') fireEvent.click(screen.getByRole('button', { name: '九巴' }));
+    const search = filter === 'KMB' ? '?q=87D&operator=KMB' : '?q=87D';
+    const operatorName = filter === 'KMB' ? '九巴' : '全部';
+    clickTab('收藏');
+    act(() => window.history.back());
+    await waitFor(() => expect(window.location.pathname).toBe('/routes'));
+    expect(window.location.search).toBe(search);
+    expect(queryInput().value).toBe('87D');
+    expect(screen.getByRole('button', { name: operatorName }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getAllByRole('link', { name: '路線' }).every((link) => link.getAttribute('href') === `/routes${search}`)).toBe(true);
+
+    act(() => window.history.forward());
+    await waitFor(() => expect(screen.getByText('收藏測試頁')).toBeDefined());
+    clickTab('路線');
+    expect(queryInput().value).toBe('87D');
+    expect(screen.getByRole('button', { name: operatorName }).getAttribute('aria-pressed')).toBe('true');
+  });
+
   it('retains the actual nearby page draft, route chips and ETA toggle across other tabs', () => {
     render(<TestApp />);
     expect(screen.getByRole<HTMLInputElement>('switch', { name: '顯示沒有到站時間的路線' }).checked).toBe(true);

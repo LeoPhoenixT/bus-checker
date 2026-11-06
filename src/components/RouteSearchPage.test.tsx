@@ -4,11 +4,15 @@ import { SearchStateProvider } from '@/contexts/SearchStateContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { RouteSearchPage } from './RouteSearchPage';
+import { installNavigationHistory } from '@/test-utils/navigation';
 
 const searchRoutesMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/kmb', () => ({ searchRoutes: searchRoutesMock }));
-vi.mock('next/navigation', () => ({ usePathname: () => '/routes' }));
+vi.mock('next/navigation', async () => ({
+  usePathname: () => '/routes',
+  useSearchParams: (await import('@/test-utils/navigation')).useTestSearchParams,
+}));
 vi.mock('next/link', () => ({
   default: ({ href, children, ...props }: React.ComponentProps<'a'>) => <a href={href} {...props}>{children}</a>,
 }));
@@ -23,33 +27,34 @@ function renderPage() {
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/routes');
+  installNavigationHistory();
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({ routes: [], truncated: false }))));
 });
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe('RouteSearchPage', () => {
-  it('accepts query-only navigation without allowing late navigation props to overwrite a newer edit', () => {
+  it('reads query-only History API navigation and retains edits when the page tree is reused', () => {
     searchRoutesMock.mockResolvedValue({ routes: [], truncated: false });
-    const view = (initialQuery: string, initialFilter: 'all' | 'KMB' = 'all') => (
+    const view = () => (
       <ThemeProvider><SearchStateProvider><LanguageProvider>
-        <RouteSearchPage initialQuery={initialQuery} initialFilter={initialFilter} />
+        <RouteSearchPage />
       </LanguageProvider></SearchStateProvider></ThemeProvider>
     );
     window.history.replaceState({}, '', '/routes?q=1');
-    const { rerender } = render(view('1'));
+    const { rerender } = render(view());
     fireEvent.change(screen.getByRole('textbox', { name: '搜尋路線號碼' }), { target: { value: '87D' } });
-    rerender(view('B1'));
+    rerender(view());
     expect(screen.getByRole<HTMLInputElement>('textbox', { name: '搜尋路線號碼' }).value).toBe('87D');
     expect(window.location.search).toBe('?q=87D');
 
-    window.history.pushState({}, '', '/routes?q=B1&operator=KMB');
-    rerender(view('B1', 'KMB'));
+    act(() => window.history.pushState({}, '', '/routes?q=B1&operator=KMB'));
     expect(screen.getByRole<HTMLInputElement>('textbox', { name: '搜尋路線號碼' }).value).toBe('B1');
     expect(screen.getByRole('button', { name: '九巴' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getAllByRole('link', { name: '路線' }).every((link) => link.getAttribute('href') === '/routes?q=B1&operator=KMB')).toBe(true);
@@ -118,8 +123,9 @@ describe('RouteSearchPage', () => {
 
   it('restores a valid query supplied by the route-search URL', async () => {
     searchRoutesMock.mockResolvedValue({ routes: [], truncated: false });
+    window.history.replaceState({}, '', '/routes?q=%20b1%20');
     render(
-      <ThemeProvider><SearchStateProvider><LanguageProvider><RouteSearchPage initialQuery=" b1 " /></LanguageProvider></SearchStateProvider></ThemeProvider>,
+      <ThemeProvider><SearchStateProvider><LanguageProvider><RouteSearchPage /></LanguageProvider></SearchStateProvider></ThemeProvider>,
     );
     await act(async () => { await vi.advanceTimersByTimeAsync(180); });
     expect((screen.getByRole('textbox', { name: '搜尋路線號碼' }) as HTMLInputElement).value).toBe('B1');

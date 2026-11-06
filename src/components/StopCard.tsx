@@ -149,11 +149,12 @@ export function StopCard({
   const finalContainers = limitRoutes && !expandedRoutes ? rankedContainers.slice(0, 5) : rankedContainers;
   const hiddenRouteCount = limitRoutes ? rankedContainers.length - finalContainers.length : 0;
 
-  /* Keep empty matching cards so ETA loading/errors and the filtered empty state stay visible. */
+  // Destination topology already establishes route membership, regardless of ETA
+  // availability. Keep feedback only for matching cards or unknown ETA-only routes.
   if (
     routeFilters.length > 0
     && visibleKeys.length === 0
-    && !etasLoading && !stopETALoading && !hasETAProblem
+    && (destinationMatches !== undefined || (!etasLoading && !stopETALoading && !hasETAProblem))
   ) return null;
 
   const distLabel =

@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useEffect } from 'react';
 import { Bus, ChevronRight, Search, X } from 'lucide-react';
 import { useLang } from '@/contexts/LanguageContext';
 import { useSearchState, type RouteSearchState } from '@/contexts/SearchStateContext';
@@ -16,42 +17,22 @@ function variantName(variant: RouteLookup, lang: 'en' | 'tc'): { origin: string;
     : { origin: variant.originTc || variant.originEn, destination: variant.destinationTc || variant.destinationEn };
 }
 
-export function RouteSearchPage({ initialQuery = '', initialFilter = 'all' }: { initialQuery?: string; initialFilter?: RouteOperatorFilter }) {
+export function RouteSearchPage() {
   const { lang } = useLang();
   const { setRouteSearch } = useSearchState();
-  const [query, setQuery] = useState(() => normalizeRouteQuery(initialQuery));
-  const [filter, setFilter] = useState<RouteOperatorFilter>(initialFilter);
+  const searchParams = useSearchParams();
+  const query = normalizeRouteQuery(searchParams.get('q') ?? '');
+  const operator = searchParams.get('operator');
+  const filter: RouteOperatorFilter = isRouteOperatorFilter(operator) ? operator : 'all';
   const { routes: results, truncated, loading, complete, sources } = useRouteSearch(query, filter);
-  // The URL is authoritative on entry, including an explicitly empty search.
-  // Tab links carry the remembered search instead of overriding deep links here.
-  useEffect(() => {
-    const params = new URL(window.location.href).searchParams;
-    const operator = params.get('operator');
-    // A navigation response can arrive after the user has already edited the URL.
-    if (normalizeRouteQuery(params.get('q') ?? '') !== normalizeRouteQuery(initialQuery)
-      || (isRouteOperatorFilter(operator) ? operator : 'all') !== initialFilter) return;
-    setQuery(normalizeRouteQuery(initialQuery));
-    setFilter(initialFilter);
-  }, [initialQuery, initialFilter]);
+  // Read the live URL even when navigation restores a cached page tree.
+  // The context only remembers the URL for links from other tabs.
   useEffect(() => {
     setRouteSearch({ query, filter });
   }, [query, filter, setRouteSearch]);
   const updateSearch = (next: RouteSearchState) => {
-    setQuery(next.query);
-    setFilter(next.filter);
-    window.history.replaceState(window.history.state, '', routeSearchHref(next.query, next.filter));
+    window.history.replaceState(null, '', routeSearchHref(next.query, next.filter));
   };
-  useEffect(() => {
-    const restore = () => {
-      if (window.location.pathname !== '/routes') return;
-      const params = new URL(window.location.href).searchParams;
-      setQuery(normalizeRouteQuery(params.get('q') ?? ''));
-      const operator = params.get('operator');
-      setFilter(isRouteOperatorFilter(operator) ? operator : 'all');
-    };
-    window.addEventListener('popstate', restore);
-    return () => window.removeEventListener('popstate', restore);
-  }, []);
   const operatorName = (operator: RouteOperator) => operator === 'KMB' ? (lang === 'en' ? 'KMB' : '九巴') : (lang === 'en' ? 'Citybus' : '城巴');
 
   return (
