@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SearchStateProvider } from '@/contexts/SearchStateContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { PrimaryNavigation } from './PrimaryNavigation';
 
@@ -14,7 +15,7 @@ afterEach(() => cleanup());
 
 describe('PrimaryNavigation', () => {
   it('marks Nearby active on the home page, Routes throughout detail, and Favourites on its page', () => {
-    const { rerender } = render(<LanguageProvider><PrimaryNavigation /></LanguageProvider>);
+    const { rerender } = render(<SearchStateProvider><LanguageProvider><PrimaryNavigation /></LanguageProvider></SearchStateProvider>);
     const nearbyLinks = screen.getAllByRole('link', { name: '附近' });
     expect(nearbyLinks).toHaveLength(2);
     expect(nearbyLinks.every((link) => link.getAttribute('aria-current') === 'page')).toBe(true);
@@ -22,14 +23,14 @@ describe('PrimaryNavigation', () => {
     expect(screen.getAllByRole('navigation').some((nav) => nav.className.includes('hidden sm:flex'))).toBe(true);
 
     pathname = '/routes/87D';
-    rerender(<LanguageProvider><PrimaryNavigation /></LanguageProvider>);
+    rerender(<SearchStateProvider><LanguageProvider><PrimaryNavigation /></LanguageProvider></SearchStateProvider>);
     const routeLinks = screen.getAllByRole('link', { name: '路線' });
     expect(routeLinks).toHaveLength(2);
     expect(routeLinks.every((link) => link.getAttribute('aria-current') === 'page')).toBe(true);
     expect(screen.getAllByRole('link', { name: '附近' }).every((link) => link.getAttribute('aria-current') === null)).toBe(true);
 
     pathname = '/favourites';
-    rerender(<LanguageProvider><PrimaryNavigation /></LanguageProvider>);
+    rerender(<SearchStateProvider><LanguageProvider><PrimaryNavigation /></LanguageProvider></SearchStateProvider>);
     const favouriteLinks = screen.getAllByRole('link', { name: '收藏' });
     expect(favouriteLinks).toHaveLength(2);
     expect(favouriteLinks.every((link) => link.getAttribute('aria-current') === 'page')).toBe(true);

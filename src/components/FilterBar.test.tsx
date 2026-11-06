@@ -11,6 +11,10 @@ describe('FilterBar', () => {
       <LanguageProvider>
         <FilterBar
           filters={[]}
+          inputValue=""
+          onInputChange={vi.fn()}
+          showRoutesWithoutETA
+          onShowRoutesWithoutETAChange={vi.fn()}
           onAdd={vi.fn()}
           onRemove={vi.fn()}
           onClear={vi.fn()}

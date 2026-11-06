@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SearchStateProvider } from '@/contexts/SearchStateContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { CitybusRouteDetailPage } from './CitybusRouteDetailPage';
@@ -23,7 +24,7 @@ const detail: CitybusRouteDetail = {
 };
 const response: CitybusETAResponse = { generated_timestamp: '2026-10-14T12:00:00+08:00', data: [] };
 function renderPage() {
-  return render(<ThemeProvider><LanguageProvider><CitybusRouteDetailPage route="1" searchQuery="1" searchFilter="CTB" /></LanguageProvider></ThemeProvider>);
+  return render(<ThemeProvider><SearchStateProvider><LanguageProvider><CitybusRouteDetailPage route="1" searchQuery="1" searchFilter="CTB" /></LanguageProvider></SearchStateProvider></ThemeProvider>);
 }
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });

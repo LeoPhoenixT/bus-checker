@@ -5,6 +5,8 @@ import { Heart, MapPin, Search } from 'lucide-react';
 import clsx from 'clsx';
 import { usePathname } from 'next/navigation';
 import { useLang } from '@/contexts/LanguageContext';
+import { useSearchState } from '@/contexts/SearchStateContext';
+import { routeSearchHref } from '@/lib/routeSearch';
 
 const links = [
   { href: '/', icon: MapPin, key: 'nearby' as const },
@@ -15,6 +17,8 @@ const links = [
 export function PrimaryNavigation() {
   const pathname = usePathname();
   const { lang } = useLang();
+  const { routeSearch } = useSearchState();
+  const routesHref = routeSearchHref(routeSearch.query, routeSearch.filter);
 
   return (
     <>
@@ -25,7 +29,7 @@ export function PrimaryNavigation() {
           return (
             <Link
               key={href}
-              href={href}
+              href={key === 'routes' ? routesHref : href}
               aria-current={active ? 'page' : undefined}
               className={clsx(
                 'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors',
@@ -48,7 +52,7 @@ export function PrimaryNavigation() {
           return (
             <Link
               key={href}
-              href={href}
+              href={key === 'routes' ? routesHref : href}
               aria-current={active ? 'page' : undefined}
               className={clsx(
                 'flex flex-1 flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-colors',

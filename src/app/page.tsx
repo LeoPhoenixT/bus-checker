@@ -4,6 +4,7 @@ import { Bus, Navigation, RotateCw } from 'lucide-react';
 import { getDistance } from 'geolib';
 import { APP_CONFIG } from '@/config';
 import { useLang } from '@/contexts/LanguageContext';
+import { useSearchState } from '@/contexts/SearchStateContext';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useNearbyStops } from '@/hooks/useNearbyStops';
 import { useStopETAs } from '@/hooks/useStopETAs';
@@ -23,7 +24,10 @@ import type { DestinationSelection, Stop } from '@/lib/types';
 
 function BusCheckerApp() {
   const { lang } = useLang();
-  const [routeFilters, setRouteFilters] = useState<string[]>([]);
+  const {
+    nearbyFilters: routeFilters, setNearbyFilters: setRouteFilters,
+    nearbyDraft, setNearbyDraft, showRoutesWithoutETA, setShowRoutesWithoutETA,
+  } = useSearchState();
   const [radius, setRadius] = useState<number>(APP_CONFIG.DEFAULT_SEARCH_RADIUS_M);
 
   // Destination state
@@ -195,6 +199,10 @@ function BusCheckerApp() {
       {hasCoords && !geoError && (
         <FilterBar
           filters={routeFilters}
+          inputValue={nearbyDraft}
+          onInputChange={setNearbyDraft}
+          showRoutesWithoutETA={showRoutesWithoutETA}
+          onShowRoutesWithoutETAChange={setShowRoutesWithoutETA}
           onAdd={addFilter}
           onRemove={removeFilter}
           onClear={clearFilters}
@@ -273,6 +281,7 @@ function BusCheckerApp() {
                   stop={stop}
                   etas={groupedEtasMap[stop.stop] ?? []}
                   routeFilters={routeFilters}
+                  showRoutesWithoutETA={showRoutesWithoutETA}
                   etasLoading={getStopIds(stop).some((stopId) => {
                     const etaState = etaStates[stopId.toUpperCase()];
                     return etaState?.attemptStatus === 'loading' && etaState.lastSuccessfulAt === null;
