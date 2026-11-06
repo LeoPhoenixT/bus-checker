@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FavouriteProvider } from '@/contexts/FavouriteContext';
+import { SearchStateProvider } from '@/contexts/SearchStateContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { FAVOURITES_STORAGE_KEY, serializeFavourites } from '@/lib/favourites';
@@ -36,7 +37,7 @@ function eta(overrides: Partial<ETAEntry> = {}): ETAEntry {
 
 function renderPage(items = [first]) {
   localStorage.setItem(FAVOURITES_STORAGE_KEY, serializeFavourites(items));
-  return render(<ThemeProvider><FavouriteProvider><LanguageProvider><FavouritesPage /></LanguageProvider></FavouriteProvider></ThemeProvider>);
+  return render(<ThemeProvider><FavouriteProvider><SearchStateProvider><LanguageProvider><FavouritesPage /></LanguageProvider></SearchStateProvider></FavouriteProvider></ThemeProvider>);
 }
 
 beforeEach(() => {

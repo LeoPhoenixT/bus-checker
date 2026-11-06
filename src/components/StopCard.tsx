@@ -12,6 +12,7 @@ import type { ETAFreshness } from '@/lib/etaFreshness';
 import type { StopETAStateWithFreshness } from '@/hooks/useStopETAs';
 import { getStopIds } from '@/lib/stopGroups';
 import { getMinutesUntil } from '@/lib/etaTime';
+import { getETAPredictions } from '@/lib/etaPresentation';
 import { groupNearbyRouteVariants, nearbyVariantKey, type NearbyRouteVariant } from '@/lib/nearbyRoutePresentation';
 import type { DirectRouteMatch, DestinationStopNames, NearbyStop, ETAEntry, Stop } from '@/lib/types';
 
@@ -20,6 +21,7 @@ interface StopCardProps {
   etas: ETAEntry[];
   routeFilters: string[];
   etasLoading: boolean;
+  showRoutesWithoutETA?: boolean;
   destinationMatches?: DirectRouteMatch[];
   destinationStopNames?: DestinationStopNames;
   destinationStops?: Record<string, Stop>;
@@ -39,6 +41,7 @@ export function StopCard({
   etas,
   routeFilters,
   etasLoading,
+  showRoutesWithoutETA = true,
   destinationMatches,
   destinationStopNames,
   destinationStops,
@@ -76,6 +79,8 @@ export function StopCard({
   const stopETAUnavailable = stopStates.length > 0
     && statesWithSuccessfulData.length === 0
     && !stopETALoading;
+  const hasETAProblem = stopETAUnavailable || stopFreshness === 'very-stale'
+    || stopStates.some((state) => state.attemptStatus === 'error');
 
   // Keep exact variant identities before constructing any display containers.
   const grouped = new Map<string, NearbyRouteVariant>();
@@ -125,7 +130,10 @@ export function StopCard({
         )
       : [...grouped.keys()];
 
-  const variants = visibleKeys.map((key) => grouped.get(key)!);
+  // Filter exact variants before grouping and applying the five-route limit.
+  const canShowPredictions = stopFreshness !== 'very-stale' && stopFreshness !== 'unavailable';
+  const variants = visibleKeys.map((key) => grouped.get(key)!)
+    .filter((variant) => showRoutesWithoutETA || (canShowPredictions && getETAPredictions(variant.etas).length > 0));
   const containers = destinationMatches === undefined
     ? groupNearbyRouteVariants(variants)
     : variants.map((variant) => ({ key: nearbyVariantKey(variant), variants: [variant] }));
@@ -141,15 +149,12 @@ export function StopCard({
   const finalContainers = limitRoutes && !expandedRoutes ? rankedContainers.slice(0, 5) : rankedContainers;
   const hiddenRouteCount = limitRoutes ? rankedContainers.length - finalContainers.length : 0;
 
-  /* Route filtering may hide a card. Destination-valid cards remain visible without live ETA. */
-  const matchingRouteWithoutETA = destinationMatches?.some((match) =>
-    (routeFilters.length === 0 || routeFilters.some((filter) => match.route.toUpperCase().includes(filter)))
-  ) ?? false;
+  // Destination topology already establishes route membership, regardless of ETA
+  // availability. Keep feedback only for matching cards or unknown ETA-only routes.
   if (
     routeFilters.length > 0
-    && finalContainers.length === 0
-    && !matchingRouteWithoutETA
-    && !etasLoading
+    && visibleKeys.length === 0
+    && (destinationMatches !== undefined || (!etasLoading && !stopETALoading && !hasETAProblem))
   ) return null;
 
   const distLabel =
@@ -195,7 +200,7 @@ export function StopCard({
       </div>
 
       <div className="mt-2 divide-y divide-[var(--divider)]">
-        {etasLoading && eligibleEtas.length === 0 && grouped.size === 0 ? (
+        {(etasLoading || stopETALoading) && finalContainers.length === 0 ? (
           /* Skeleton rows while first ETA fetch is in-flight */
           [...Array(3)].map((_, i) => (
             <div key={i} className="flex items-center gap-3 py-2.5 animate-pulse">
@@ -206,9 +211,11 @@ export function StopCard({
           ))
         ) : finalContainers.length === 0 ? (
           <p className="py-3 text-sm text-[var(--muted)] text-center">
-            {stopETAUnavailable
+            {hasETAProblem
               ? lang === 'en' ? 'ETA unavailable' : '暫未能取得到站時間'
-              : lang === 'en' ? 'No arrivals available' : '暫無班次資料'}
+              : !showRoutesWithoutETA
+                ? lang === 'en' ? 'No routes with ETA available' : '暫無提供到站時間的路線'
+                : lang === 'en' ? 'No arrivals available' : '暫無班次資料'}
           </p>
         ) : (
           finalContainers.map((container) => {
