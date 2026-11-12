@@ -24,7 +24,7 @@ metadata is loaded on demand for the selected route.
 
 ## Requirements
 
-- Node.js 24.22.1 LTS (see `.node-version`)
+- Node.js 24.22.3 LTS (see `.node-version`)
 - pnpm 10.34.5 (see `packageManager` in `package.json`)
 
 ## Local development
