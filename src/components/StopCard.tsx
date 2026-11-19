@@ -187,7 +187,10 @@ export function StopCard({
           {distLabel}
         </span>
         <button
-          onClick={() => setMapStop(stop)}
+          onClick={(event) => {
+            event.currentTarget.focus({ preventScroll: true });
+            setMapStop(stop);
+          }}
           className={clsx(
             'mt-0.5 shrink-0 flex items-center justify-center h-7 w-7 rounded-lg transition',
             'border border-[var(--divider)] hover:border-blue-500/50 hover:bg-blue-500/10',

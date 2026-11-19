@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Bus, ChevronRight, Search, X } from 'lucide-react';
 import { useLang } from '@/contexts/LanguageContext';
 import { useSearchState, type RouteSearchState } from '@/contexts/SearchStateContext';
@@ -24,6 +24,7 @@ export function RouteSearchPage() {
   const query = normalizeRouteQuery(searchParams.get('q') ?? '');
   const operator = searchParams.get('operator');
   const filter: RouteOperatorFilter = isRouteOperatorFilter(operator) ? operator : 'all';
+  const allOperatorsRef = useRef<HTMLButtonElement>(null);
   const { routes: results, truncated, loading, complete, sources } = useRouteSearch(query, filter);
   // Read the live URL even when navigation restores a cached page tree.
   // The context only remembers the URL for links from other tabs.
@@ -57,7 +58,7 @@ export function RouteSearchPage() {
 
         <div className="mt-4 flex gap-2" role="group" aria-label={lang === 'en' ? 'Bus operator' : '巴士公司'}>
           {(['all', 'KMB', 'CTB'] as const).map((value) => (
-            <button key={value} type="button" aria-pressed={filter === value} onClick={() => updateSearch({ query, filter: value })}
+            <button key={value} ref={value === 'all' ? allOperatorsRef : undefined} type="button" aria-pressed={filter === value} onClick={() => updateSearch({ query, filter: value })}
               className={`min-h-11 rounded-xl border px-4 py-2 text-sm font-semibold ${filter === value ? 'border-blue-500 bg-blue-500/10 text-blue-700 dark:text-blue-300' : 'border-[var(--card-border)] text-[var(--muted)]'}`}>
               {value === 'all' ? (lang === 'en' ? 'All' : '全部') : operatorName(value)}
             </button>
@@ -111,10 +112,22 @@ export function RouteSearchPage() {
             {[0, 1, 2].map((index) => <div key={index} className="h-20 animate-pulse rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)]" />)}
           </div>
         ) : results.length === 0 && complete ? (
-          <p className="py-16 text-center text-sm text-[var(--muted)]">
-            {lang === 'en' ? `No routes found for “${query}”.` : `找不到「${query}」的路線。`}
-          </p>
-        ) : (
+          <div className="flex flex-col items-center gap-3 py-10 text-center sm:py-16">
+            <p className="text-sm text-[var(--muted)]">
+              {filter === 'all'
+                ? (lang === 'en' ? `No routes found for “${query}”.` : `找不到「${query}」的路線。`)
+                : (lang === 'en' ? `No ${operatorName(filter)} routes found for “${query}”.` : `找不到「${query}」的${operatorName(filter)}路線。`)}
+            </p>
+            {filter !== 'all' && (
+              <button type="button" onClick={() => {
+                updateSearch({ query, filter: 'all' });
+                allOperatorsRef.current?.focus();
+              }} className="min-h-11 rounded-xl border border-[var(--input-border)] px-4 py-2 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--card-border)] focus-visible:ring-2 focus-visible:ring-blue-500">
+                {lang === 'en' ? 'Search all operators' : '搜尋所有巴士公司'}
+              </button>
+            )}
+          </div>
+        ) : results.length > 0 && (
           <div className="mt-5 overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)]">
             {results.map((route) => {
               const names = variantName(route, lang);

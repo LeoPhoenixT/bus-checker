@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Bus, Heart, RefreshCw, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEventHandler } from 'react';
 import { useFavourites } from '@/contexts/FavouriteContext';
 import { useLang } from '@/contexts/LanguageContext';
 import { useStopETAs } from '@/hooks/useStopETAs';
@@ -52,7 +52,7 @@ function FavouriteCard({
   freshness: ETAFreshness;
   lastSuccessfulAt: Date | null;
   loading: boolean;
-  onRemove: () => void;
+  onRemove: MouseEventHandler<HTMLButtonElement>;
 }) {
   const { lang } = useLang();
   const labels = metadata ? metadataName(metadata, lang) : null;
@@ -136,11 +136,26 @@ function FavouriteCard({
 
 export function FavouritesPage() {
   const { lang } = useLang();
-  const { favourites, hydrated, removeFavourite } = useFavourites();
+  const { favourites, hydrated, removeFavourite, restoreFavourite } = useFavourites();
   const [metadata, setMetadata] = useState<FavouriteRouteStopMetadata[]>([]);
   const [metadataState, setMetadataState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [metadataRetry, setMetadataRetry] = useState(0);
+  const [removed, setRemoved] = useState<{
+    favourite: FavouriteRouteStop;
+    index: number;
+    stop?: FavouriteRouteStopMetadata['stop'];
+  } | null>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const undoRef = useRef<HTMLButtonElement>(null);
+  const focusUndo = useRef(false);
   const favouriteKey = favourites.map(favouriteRouteStopKey).join(',');
+
+  useLayoutEffect(() => {
+    if (removed && focusUndo.current) {
+      undoRef.current?.focus();
+      focusUndo.current = false;
+    }
+  }, [removed]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -158,15 +173,43 @@ export function FavouritesPage() {
   }, [favouriteKey, hydrated, metadataRetry]); // favouriteKey changes only with the stable identity list.
 
   const metadataByKey = useMemo(() => new Map(metadata.map((item) => [favouriteRouteStopKey(item.favourite), item])), [metadata]);
+  const removedStopLabel = (lang === 'en'
+    ? removed?.stop?.nameEn || removed?.stop?.nameTc
+    : removed?.stop?.nameTc || removed?.stop?.nameEn) || removed?.favourite.stopId;
   const stopIds = hydrated ? favourites.map((item) => item.stopId) : [];
   const { etasMap, etaStates, lastRefreshed, lastAttemptAt, failedStopCount, loading, refresh } = useStopETAs(stopIds);
+
+  const dismissNotice = () => {
+    setRemoved(null);
+    mainRef.current?.focus({ preventScroll: true });
+  };
 
   return (
     <div className="min-h-screen">
       <PageHeader>
         <div className="flex items-center gap-2.5 text-white"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15"><Heart className="h-5 w-5" /></span><div><h1 className="text-lg font-bold leading-none">{lang === 'en' ? 'Favourites' : '收藏'}</h1><p className="mt-0.5 text-[11px] text-blue-100">{lang === 'en' ? 'Your usual boarding stops' : '你常用的上車站'}</p></div></div>
       </PageHeader>
-      <main className="mx-auto max-w-2xl px-4 py-6 pb-24 sm:pb-6">
+      <main ref={mainRef} tabIndex={-1} className="mx-auto max-w-2xl px-4 py-6 pb-24 outline-none sm:pb-6">
+        <div className={removed ? 'mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-2 pl-4' : undefined}>
+          <p role="status" className="min-w-0 grow basis-48 break-words text-sm text-[var(--foreground)]">
+            {removed && (lang === 'en'
+              ? `Removed ${removed.favourite.route} · ${removedStopLabel} from favourites.`
+              : `已移除 ${removed.favourite.route} · ${removedStopLabel} 的收藏。`)}
+          </p>
+          {removed && (
+            <div className="flex shrink-0 gap-1">
+              <button ref={undoRef} type="button" onClick={() => {
+                restoreFavourite(removed.favourite, removed.index);
+                dismissNotice();
+              }} className="min-h-11 rounded-lg px-3 text-sm font-semibold text-blue-700 hover:bg-blue-500/10 focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-300">
+                {lang === 'en' ? 'Undo' : '復原'}
+              </button>
+              <button type="button" onClick={dismissNotice} className="min-h-11 rounded-lg px-3 text-sm font-semibold text-[var(--muted)] hover:bg-[var(--card-border)] focus-visible:ring-2 focus-visible:ring-blue-500">
+                {lang === 'en' ? 'Dismiss' : '關閉'}
+              </button>
+            </div>
+          )}
+        </div>
         {!hydrated ? (
           <div className="space-y-4" aria-label={lang === 'en' ? 'Loading favourites' : '正在載入收藏'}><div className="h-28 animate-pulse rounded-2xl bg-[var(--card-border)]" /><div className="h-28 animate-pulse rounded-2xl bg-[var(--card-border)]" /></div>
         ) : favourites.length === 0 ? (
@@ -174,10 +217,28 @@ export function FavouritesPage() {
         ) : (
           <div className="space-y-3">
             {metadataState === 'error' && <button type="button" onClick={() => setMetadataRetry((count) => count + 1)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-800 dark:text-amber-200" aria-label={lang === 'en' ? 'Retry route information' : '重試路線資料'}><RefreshCw className="h-4 w-4" />{lang === 'en' ? 'Route information is temporarily unavailable' : '暫時無法載入路線資料'}</button>}
-            {favourites.map((favourite) => {
+            {favourites.map((favourite, index) => {
               const key = favouriteRouteStopKey(favourite);
               const state = etaStates[favourite.stopId];
-              return <FavouriteCard key={key} favourite={favourite} metadata={metadataByKey.get(key)} metadataLoading={metadataState === 'loading'} metadataUnavailable={metadataState === 'error'} etas={filterFavouriteRouteStopETAs(etasMap[favourite.stopId] ?? [], favourite, metadataByKey.get(key)?.stop?.seq)} freshness={state?.freshness ?? 'unavailable'} lastSuccessfulAt={state?.lastSuccessfulAt ?? null} loading={state?.attemptStatus === 'loading'} onRemove={() => removeFavourite(favourite)} />;
+              const itemMetadata = metadataByKey.get(key);
+              return (
+                <FavouriteCard
+                  key={key}
+                  favourite={favourite}
+                  metadata={itemMetadata}
+                  metadataLoading={metadataState === 'loading'}
+                  metadataUnavailable={metadataState === 'error'}
+                  etas={filterFavouriteRouteStopETAs(etasMap[favourite.stopId] ?? [], favourite, itemMetadata?.stop?.seq)}
+                  freshness={state?.freshness ?? 'unavailable'}
+                  lastSuccessfulAt={state?.lastSuccessfulAt ?? null}
+                  loading={state?.attemptStatus === 'loading'}
+                  onRemove={(event) => {
+                    focusUndo.current = event.currentTarget === document.activeElement;
+                    setRemoved({ favourite, index, stop: itemMetadata?.stop });
+                    removeFavourite(favourite);
+                  }}
+                />
+              );
             })}
           </div>
         )}

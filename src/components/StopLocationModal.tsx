@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { X, MapPin } from 'lucide-react';
 import { useLang } from '@/contexts/LanguageContext';
 import { addOpenStreetMapTiles, createRedMarkerIcon, loadLeaflet } from '@/lib/leaflet';
+import { MapDialog } from './MapDialog';
 import type { Stop } from '@/lib/types';
 
 interface StopLocationModalProps {
@@ -12,107 +13,84 @@ interface StopLocationModalProps {
   stop: Stop;
 }
 
-// Leaflet types (loaded dynamically, not at module level)
-type LeafletMap = import('leaflet').Map;
+export function StopLocationModal({ isOpen, ...props }: StopLocationModalProps) {
+  return isOpen ? <StopLocationPreview {...props} /> : null;
+}
 
-export function StopLocationModal({ isOpen, onClose, stop }: StopLocationModalProps) {
+function StopLocationPreview({ onClose, stop }: Omit<StopLocationModalProps, 'isOpen'>) {
   const { lang } = useLang();
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<LeafletMap | null>(null);
   const stopName = lang === 'en' ? stop.name_en : stop.name_tc;
 
   // Initialise Leaflet map (client-side only — Leaflet requires window)
   useEffect(() => {
-    if (!isOpen || !mapContainerRef.current) return;
-    if (mapRef.current) return; // already initialised
-
     let cancelled = false;
+    let map: import('leaflet').Map | undefined;
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
 
     loadLeaflet().then((L) => {
       if (cancelled || !mapContainerRef.current) return;
 
-      const map = L.map(mapContainerRef.current, {
+      const previewMap = L.map(mapContainerRef.current, {
         center: [Number(stop.lat), Number(stop.long)],
         zoom: 17,
         zoomControl: true,
       });
 
-      addOpenStreetMapTiles(L, map);
+      addOpenStreetMapTiles(L, previewMap);
 
       // Red marker at stop location
       const stopIcon = createRedMarkerIcon(L);
 
-      L.marker([Number(stop.lat), Number(stop.long)], { icon: stopIcon }).addTo(map);
-
-      mapRef.current = map;
+      L.marker([Number(stop.lat), Number(stop.long)], { icon: stopIcon }).addTo(previewMap);
+      map = previewMap;
 
       // Trigger resize in case modal animates in
-      setTimeout(() => map.invalidateSize(), 150);
+      resizeTimer = setTimeout(() => previewMap.invalidateSize(), 150);
     });
 
     return () => {
       cancelled = true;
+      clearTimeout(resizeTimer);
+      map?.remove();
     };
-  }, [isOpen, stop.lat, stop.long]);
-
-  // Destroy map when modal closes so it re-initialises fresh next open
-  useEffect(() => {
-    if (!isOpen && mapRef.current) {
-      mapRef.current.remove();
-      mapRef.current = null;
-    }
-  }, [isOpen]);
-
-  if (!isOpen) return null;
+  }, [stop.lat, stop.long]);
 
   return (
-    /* Backdrop */
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={lang === 'en' ? `Bus stop location: ${stopName}` : `巴士站位置：${stopName}`}
-    >
-      {/* Overlay */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Panel */}
-      <div className="relative z-10 flex w-full max-w-lg flex-col rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--divider)] px-4 py-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <MapPin className="h-4 w-4 text-red-500 shrink-0" />
-            <div className="min-w-0">
-              <h2 className="text-sm font-semibold text-[var(--foreground)] truncate">
-                {stopName}
-              </h2>
-              <p className="text-xs text-[var(--muted)] font-mono">{stop.stop}</p>
-            </div>
+    <MapDialog label={lang === 'en' ? `Bus stop location: ${stopName}` : `巴士站位置：${stopName}`} onClose={onClose}>
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--divider)] px-4 py-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <MapPin className="h-4 w-4 text-red-500 shrink-0" />
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-[var(--foreground)] truncate">
+              {stopName}
+            </h2>
+            <p className="text-xs text-[var(--muted)] font-mono">{stop.stop}</p>
           </div>
-          <button
-            onClick={onClose}
-            aria-label={lang === 'en' ? 'Close' : '關閉'}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--card-border)] transition shrink-0"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
-
-        {/* Map */}
-        <div className="relative">
-          <div ref={mapContainerRef} className="h-72 sm:h-96 w-full" />
-        </div>
-
-        {/* Footer */}
-        <div className="border-t border-[var(--divider)] px-4 py-3">
-          <p className="text-xs text-[var(--muted)]">
-            {Number(stop.lat).toFixed(5)}, {Number(stop.long).toFixed(5)}
-          </p>
-        </div>
+        <button
+          type="button"
+          data-dialog-initial-focus
+          onClick={onClose}
+          aria-label={lang === 'en' ? 'Close' : '關閉'}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] transition hover:bg-[var(--card-border)] focus-visible:ring-2 focus-visible:ring-blue-500"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
-    </div>
+
+      {/* Map */}
+      <div className="relative">
+        <div ref={mapContainerRef} className="h-72 sm:h-96 w-full" />
+      </div>
+
+      {/* Footer */}
+      <div className="border-t border-[var(--divider)] px-4 py-3">
+        <p className="text-xs text-[var(--muted)]">
+          {Number(stop.lat).toFixed(5)}, {Number(stop.long).toFixed(5)}
+        </p>
+      </div>
+    </MapDialog>
   );
 }

@@ -7,17 +7,17 @@ import { RADIUS_PRESETS } from '@/config';
 import { useLang } from '@/contexts/LanguageContext';
 import { addOpenStreetMapTiles, createRedMarkerIcon, loadLeaflet } from '@/lib/leaflet';
 import { DestinationSearch } from './DestinationSearch';
+import { MapDialog } from './MapDialog';
 import type { AddressSearchResult, DestinationSelection, Stop } from '@/lib/types';
 
 interface DestinationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (selection: DestinationSelection) => void;
+  onConfirm: (selection: DestinationSelection, radius: number) => void;
   currentDestination: DestinationSelection | null;
   userLat: number | null;
   userLon: number | null;
   destinationRadius: number;
-  onChangeRadius: (r: number) => void;
 }
 
 // Leaflet types (loaded dynamically, not at module level)
@@ -41,58 +41,50 @@ function getSearchQuery(selection: DestinationSelection, lang: 'en' | 'tc'): str
   return selection.source === 'address' ? selection.label ?? '' : '';
 }
 
-export function DestinationModal({
-  isOpen,
+export function DestinationModal({ isOpen, ...props }: DestinationModalProps) {
+  return isOpen ? <DestinationPicker {...props} /> : null;
+}
+
+function DestinationPicker({
   onClose,
   onConfirm,
   currentDestination,
   userLat,
   userLon,
   destinationRadius,
-  onChangeRadius,
-}: DestinationModalProps) {
+}: Omit<DestinationModalProps, 'isOpen'>) {
   const { lang } = useLang();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markerRef = useRef<LeafletMarker | null>(null);
-  const destinationIconRef = useRef<LeafletIcon | null>(null);
-  const [selection, setSelection] = useState<DestinationSelection | null>(null);
+  const addMarkerRef = useRef<((coordinates: [number, number]) => LeafletMarker) | null>(null);
+  const latestSelection = useRef(currentDestination);
+  const [selection, setSelection] = useState(currentDestination);
+  const [draftRadius, setDraftRadius] = useState(destinationRadius);
 
   const placeSelection = (nextSelection: DestinationSelection) => {
+    latestSelection.current = nextSelection;
     setSelection(nextSelection);
-    const [lat, lon] = getSelectionCoordinates(nextSelection);
-    const map = mapRef.current;
-    if (!map) return;
-    map.flyTo([lat, lon], 17);
+    const coordinates = getSelectionCoordinates(nextSelection);
+    mapRef.current?.flyTo(coordinates, 17);
     if (markerRef.current) {
-      markerRef.current.setLatLng([lat, lon]);
-    } else if (destinationIconRef.current) {
-      void loadLeaflet().then((L) => {
-        if (mapRef.current && destinationIconRef.current) {
-          markerRef.current = L.marker([lat, lon], { icon: destinationIconRef.current }).addTo(mapRef.current);
-        }
-      });
+      markerRef.current.setLatLng(coordinates);
+    } else if (addMarkerRef.current) {
+      markerRef.current = addMarkerRef.current(coordinates);
     }
   };
 
-  useEffect(() => {
-    if (isOpen) setSelection(currentDestination);
-  }, [currentDestination, isOpen]);
-
   // Initialise Leaflet map (client-side only — Leaflet requires window)
   useEffect(() => {
-    if (!isOpen || !mapContainerRef.current) return;
-    if (mapRef.current) return; // already initialised
-
     let cancelled = false;
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
 
     loadLeaflet().then((L) => {
       if (cancelled || !mapContainerRef.current) return;
 
-      // Prefer the confirmed destination so reopening the picker shows its current selection.
-      const savedDestination = currentDestination && getSelectionCoordinates(currentDestination);
-      const centerLat = savedDestination?.[0] ?? userLat ?? 22.3193;
-      const centerLon = savedDestination?.[1] ?? userLon ?? 114.1694;
+      const selectedPoint = latestSelection.current && getSelectionCoordinates(latestSelection.current);
+      const centerLat = selectedPoint?.[0] ?? userLat ?? 22.3193;
+      const centerLon = selectedPoint?.[1] ?? userLon ?? 114.1694;
 
       const map = L.map(mapContainerRef.current, {
         center: [centerLat, centerLon],
@@ -113,153 +105,137 @@ export function DestinationModal({
       }
 
       // Red destination marker icon
-      const destIcon = createRedMarkerIcon(L);
-      destinationIconRef.current = destIcon;
+      const destIcon: LeafletIcon = createRedMarkerIcon(L);
+      const addMarker = (coordinates: [number, number]) => L.marker(coordinates, { icon: destIcon }).addTo(map);
+      addMarkerRef.current = addMarker;
 
-      if (savedDestination) {
-        markerRef.current = L.marker(savedDestination, { icon: destIcon }).addTo(map);
+      if (selectedPoint) {
+        markerRef.current = addMarker(selectedPoint);
       }
 
       // Handle map click to set destination
       map.on('click', (e: import('leaflet').LeafletMouseEvent) => {
         const { lat, lng } = e.latlng;
-        setSelection({ kind: 'point', source: 'map', lat, lon: lng });
+        const nextSelection = { kind: 'point', source: 'map', lat, lon: lng } as const;
+        latestSelection.current = nextSelection;
+        setSelection(nextSelection);
 
         if (markerRef.current) {
           markerRef.current.setLatLng([lat, lng]);
         } else {
-          markerRef.current = L.marker([lat, lng], { icon: destIcon }).addTo(map);
+          markerRef.current = addMarker([lat, lng]);
         }
       });
 
       mapRef.current = map;
 
       // Trigger resize in case modal animates in
-      setTimeout(() => map.invalidateSize(), 150);
+      resizeTimer = setTimeout(() => map.invalidateSize(), 150);
     });
 
     return () => {
       cancelled = true;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
-
-  // Destroy map when modal closes so it re-initialises fresh next open
-  useEffect(() => {
-    if (!isOpen && mapRef.current) {
-      mapRef.current.remove();
+      clearTimeout(resizeTimer);
+      mapRef.current?.remove();
       mapRef.current = null;
       markerRef.current = null;
-      destinationIconRef.current = null;
-      setSelection(null);
-    }
-  }, [isOpen]);
-
-  if (!isOpen) return null;
+      addMarkerRef.current = null;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    /* Backdrop */
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={lang === 'en' ? 'Select destination' : '選擇目的地'}
-    >
-      {/* Overlay */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
+    <MapDialog label={lang === 'en' ? 'Select destination' : '選擇目的地'} onClose={onClose}>
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--divider)] px-4 py-3">
+        <div className="flex items-center gap-2">
+          <MapPin className="h-4 w-4 text-blue-500" />
+          <h2 className="text-sm font-semibold text-[var(--foreground)]">
+            {lang === 'en' ? 'Select Destination' : '選擇目的地'}
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={lang === 'en' ? 'Close' : '關閉'}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] transition hover:bg-[var(--card-border)] focus-visible:ring-2 focus-visible:ring-blue-500"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <DestinationSearch
+        initialQuery={currentDestination ? getSearchQuery(currentDestination, lang) : ''}
+        onSelectStop={(stop: Stop) => placeSelection({ kind: 'stop', stop })}
+        onSelectAddress={(address: AddressSearchResult) => placeSelection({
+          kind: 'point',
+          source: 'address',
+          lat: address.lat,
+          lon: address.lon,
+          label: lang === 'en' ? address.labelEn : address.labelTc,
+        })}
       />
 
-      {/* Panel */}
-      <div className="relative z-10 flex w-full max-w-lg flex-col rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--divider)] px-4 py-3">
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-blue-500" />
-            <h2 className="text-sm font-semibold text-[var(--foreground)]">
-              {lang === 'en' ? 'Select Destination' : '選擇目的地'}
-            </h2>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label={lang === 'en' ? 'Close' : '關閉'}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--card-border)] transition"
-          >
-            <X className="h-4 w-4" />
-          </button>
+      {/* Radius selector */}
+      {selection?.kind !== 'stop' ? <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--divider)] px-4 py-2.5 bg-[var(--background)]">
+        <span className="text-xs text-[var(--muted)]">{lang === 'en' ? 'Destination zone:' : '目的地範圍：'}</span>
+        <div className="flex flex-wrap gap-1.5">
+          {RADIUS_PRESETS.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              aria-pressed={preset === draftRadius}
+              onClick={() => setDraftRadius(preset)}
+              className={clsx(
+                'rounded-full border px-2.5 py-0.5 text-xs font-medium transition',
+                preset === draftRadius
+                  ? 'border-blue-500 bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                  : 'border-[var(--input-border)] bg-[var(--input-bg)] text-[var(--muted)] hover:border-blue-500/50',
+              )}
+            >
+              {preset >= 1000 ? `${preset / 1000}km` : `${preset}m`}
+            </button>
+          ))}
         </div>
+      </div> : (
+        <div className="border-b border-[var(--divider)] bg-[var(--background)] px-4 py-2.5 text-xs font-medium text-blue-600 dark:text-blue-400">
+          {lang === 'en' ? 'Exact stop' : '指定巴士站'}
+        </div>
+      )}
 
-        <DestinationSearch
-          initialQuery={currentDestination ? getSearchQuery(currentDestination, lang) : ''}
-          onSelectStop={(stop: Stop) => placeSelection({ kind: 'stop', stop })}
-          onSelectAddress={(address: AddressSearchResult) => placeSelection({
-            kind: 'point',
-            source: 'address',
-            lat: address.lat,
-            lon: address.lon,
-            label: lang === 'en' ? address.labelEn : address.labelTc,
-          })}
-        />
-
-        {/* Radius selector */}
-        {selection?.kind !== 'stop' ? <div className="flex items-center gap-3 border-b border-[var(--divider)] px-4 py-2.5 bg-[var(--background)]">
-          <span className="text-xs text-[var(--muted)]">{lang === 'en' ? 'Destination zone:' : '目的地範圍：'}</span>
-          <div className="flex gap-1.5">
-            {RADIUS_PRESETS.map((preset) => (
-              <button
-                key={preset}
-                onClick={() => onChangeRadius(preset)}
-                className={clsx(
-                  'rounded-full border px-2.5 py-0.5 text-xs font-medium transition',
-                  preset === destinationRadius
-                    ? 'border-blue-500 bg-blue-500/15 text-blue-600 dark:text-blue-400'
-                    : 'border-[var(--input-border)] bg-[var(--input-bg)] text-[var(--muted)] hover:border-blue-500/50',
-                )}
-              >
-                {preset >= 1000 ? `${preset / 1000}km` : `${preset}m`}
-              </button>
-            ))}
-          </div>
-        </div> : (
-          <div className="border-b border-[var(--divider)] bg-[var(--background)] px-4 py-2.5 text-xs font-medium text-blue-600 dark:text-blue-400">
-            {lang === 'en' ? 'Exact stop' : '指定巴士站'}
+      {/* Map */}
+      <div className="relative">
+        <div ref={mapContainerRef} className="h-72 sm:h-96 w-full" />
+        {!selection && (
+          <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1.5 text-xs text-white/90">
+            {lang === 'en' ? 'Tap map to set destination' : '點按地圖設定目的地'}
           </div>
         )}
-
-        {/* Map */}
-        <div className="relative">
-          <div ref={mapContainerRef} className="h-72 sm:h-96 w-full" />
-          {!selection && (
-            <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1.5 text-xs text-white/90">
-              {lang === 'en' ? 'Tap map to set destination' : '點按地圖設定目的地'}
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between gap-3 border-t border-[var(--divider)] px-4 py-3">
-          <p className="text-xs text-[var(--muted)]">
-            {selection
-              ? getSelectionLabel(selection, lang)
-              : lang === 'en' ? 'No point selected' : '尚未選擇位置'}
-          </p>
-          <button
-            disabled={!selection}
-            onClick={() => {
-              if (selection) onConfirm(selection);
-            }}
-            className={clsx(
-              'rounded-xl px-4 py-2 text-sm font-semibold transition',
-              selection
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'cursor-not-allowed bg-[var(--card-border)] text-[var(--muted)]',
-            )}
-          >
-            {lang === 'en' ? 'Confirm' : '確認'}
-          </button>
-        </div>
       </div>
-    </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between gap-3 border-t border-[var(--divider)] px-4 py-3">
+        <p className="text-xs text-[var(--muted)]">
+          {selection
+            ? getSelectionLabel(selection, lang)
+            : lang === 'en' ? 'No point selected' : '尚未選擇位置'}
+        </p>
+        <button
+          type="button"
+          disabled={!selection}
+          onClick={() => {
+            if (selection) onConfirm(selection, draftRadius);
+          }}
+          className={clsx(
+            'rounded-xl px-4 py-2 text-sm font-semibold transition',
+            selection
+              ? 'bg-blue-600 text-white hover:bg-blue-700'
+              : 'cursor-not-allowed bg-[var(--card-border)] text-[var(--muted)]',
+          )}
+        >
+          {lang === 'en' ? 'Confirm' : '確認'}
+        </button>
+      </div>
+    </MapDialog>
   );
 }
