@@ -18,6 +18,7 @@ interface FavouriteContextType {
   isFavourite: (favourite: FavouriteRouteStop) => boolean;
   toggleFavourite: (favourite: FavouriteRouteStop) => void;
   removeFavourite: (favourite: FavouriteRouteStop) => void;
+  restoreFavourite: (favourite: FavouriteRouteStop, index: number) => void;
 }
 
 const FavouriteContext = createContext<FavouriteContextType | undefined>(undefined);
@@ -77,7 +78,20 @@ export function FavouriteProvider({ children }: { children: ReactNode }) {
     setFavourites((previous) => persist(previous.filter((item) => favouriteRouteStopKey(item) !== key)));
   }, [hydrated, persist]);
 
-  const value = useMemo(() => ({ favourites, hydrated, isFavourite, toggleFavourite, removeFavourite }), [favourites, hydrated, isFavourite, removeFavourite, toggleFavourite]);
+  const restoreFavourite = useCallback((candidate: FavouriteRouteStop, index: number) => {
+    if (!hydrated) return;
+    const normalized = normalizeFavouriteRouteStop(candidate);
+    if (!normalized) return;
+    const key = favouriteRouteStopKey(normalized);
+    setFavourites((previous) => {
+      if (previous.some((item) => favouriteRouteStopKey(item) === key)) return previous;
+      const next = [...previous];
+      next.splice(index, 0, normalized);
+      return persist(next);
+    });
+  }, [hydrated, persist]);
+
+  const value = useMemo(() => ({ favourites, hydrated, isFavourite, toggleFavourite, removeFavourite, restoreFavourite }), [favourites, hydrated, isFavourite, removeFavourite, restoreFavourite, toggleFavourite]);
   return <FavouriteContext.Provider value={value}>{children}</FavouriteContext.Provider>;
 }
 

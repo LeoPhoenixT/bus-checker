@@ -31,8 +31,10 @@ function BusCheckerApp() {
   const [radius, setRadius] = useState<number>(APP_CONFIG.DEFAULT_SEARCH_RADIUS_M);
 
   // Destination state
-  const [destination, setDestination] = useState<DestinationSelection | null>(null);
-  const [destRadius, setDestRadius] = useState<number>(APP_CONFIG.DESTINATION_DEFAULT_RADIUS_M);
+  const [{ destination, destRadius }, setDestinationFilter] = useState<{
+    destination: DestinationSelection | null;
+    destRadius: number;
+  }>({ destination: null, destRadius: APP_CONFIG.DESTINATION_DEFAULT_RADIUS_M });
   const [showDestModal, setShowDestModal] = useState(false);
 
   const addFilter = (route: string) => {
@@ -211,7 +213,7 @@ function BusCheckerApp() {
           destinationDistanceM={destDistanceM}
           onOpenDestinationModal={() => setShowDestModal(true)}
           onClearDestination={() => {
-            setDestination(null);
+            setDestinationFilter((current) => ({ ...current, destination: null }));
           }}
         />
       )}
@@ -219,7 +221,7 @@ function BusCheckerApp() {
       {/* ── Main Content ── */}
       <main className="mx-auto max-w-2xl px-4 py-6 pb-24 sm:pb-6">
         {showPrompt ? (
-          <LocationPrompt loading={geoLoading} error={geoError} supported={supported} />
+          <LocationPrompt loading={geoLoading} error={geoError} supported={supported} onRetry={refreshLocation} />
         ) : stopsLoading ? (
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
@@ -312,15 +314,14 @@ function BusCheckerApp() {
       <DestinationModal
         isOpen={showDestModal}
         onClose={() => setShowDestModal(false)}
-        onConfirm={(selection) => {
-          setDestination(selection);
+        onConfirm={(selection, nextRadius) => {
+          setDestinationFilter({ destination: selection, destRadius: nextRadius });
           setShowDestModal(false);
         }}
         currentDestination={destination}
         userLat={lat}
         userLon={lon}
         destinationRadius={destRadius}
-        onChangeRadius={setDestRadius}
       />
     </div>
   );

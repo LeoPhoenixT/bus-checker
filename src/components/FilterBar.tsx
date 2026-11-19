@@ -106,7 +106,10 @@ export function FilterBar({
             <Plus className="h-4 w-4" />
           </button>
           <button
-            onClick={onOpenDestinationModal}
+            onClick={(event) => {
+              event.currentTarget.focus({ preventScroll: true });
+              onOpenDestinationModal();
+            }}
             aria-label={lang === 'en' ? 'Find by destination' : '按目的地查找'}
             title={lang === 'en' ? 'Find by destination' : '按目的地查找'}
             className={clsx(

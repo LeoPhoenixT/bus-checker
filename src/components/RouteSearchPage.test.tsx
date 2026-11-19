@@ -131,4 +131,36 @@ describe('RouteSearchPage', () => {
     expect((screen.getByRole('textbox', { name: '搜尋路線號碼' }) as HTMLInputElement).value).toBe('B1');
     expect(searchRoutesMock).toHaveBeenCalledWith('B1', expect.objectContaining({ signal: expect.anything() }));
   });
+
+  it('keeps the query and broadens a completed empty operator search', async () => {
+    searchRoutesMock.mockResolvedValue({ routes: [], truncated: false });
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ routes: [{
+      operator: 'CTB', route: 'B1', originEn: 'A', originTc: '甲', destinationEn: 'B', destinationTc: '乙',
+    }], truncated: false })));
+    window.history.replaceState({}, '', '/routes?q=B1&operator=KMB');
+    renderPage();
+
+    await act(() => vi.advanceTimersByTimeAsync(180));
+    expect(screen.getByText('找不到「B1」的九巴路線。')).toBeDefined();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(window.location.search).toBe('?q=B1&operator=KMB');
+
+    fireEvent.click(screen.getByRole('button', { name: '搜尋所有巴士公司' }));
+    expect(screen.getByRole('button', { name: '全部', pressed: true })).toBe(document.activeElement);
+    expect((screen.getByRole('textbox', { name: '搜尋路線號碼' }) as HTMLInputElement).value).toBe('B1');
+    expect(window.location.search).toBe('?q=B1');
+    await act(() => vi.advanceTimersByTimeAsync(180));
+    expect(screen.getByRole('link', { name: /往 乙/ }).getAttribute('href')).toBe('/routes/B1?operator=CTB&q=B1');
+  });
+
+  it('keeps operator errors in the retry state', async () => {
+    searchRoutesMock.mockRejectedValue(new Error('offline'));
+    window.history.replaceState({}, '', '/routes?q=B1&operator=KMB');
+    renderPage();
+
+    await act(() => vi.advanceTimersByTimeAsync(180));
+    expect(screen.getByRole('button', { name: '重試' })).toBeDefined();
+    expect(screen.queryByRole('button', { name: '搜尋所有巴士公司' })).toBeNull();
+    expect(screen.queryByText(/找不到/)).toBeNull();
+  });
 });

@@ -141,4 +141,43 @@ describe('FavouritesPage', () => {
     await waitFor(() => expect(screen.getByText('尚未有收藏')).toBeDefined());
     expect(screen.getByRole('link', { name: '搜尋路線' }).getAttribute('href')).toBe('/routes');
   });
+
+  it('restores the removed stop occurrence at its previous index in the versioned store', async () => {
+    const seq2 = { ...first, boardingSeq: 2 };
+    const seq23 = { ...first, boardingSeq: 23 };
+    const saved = [seq2, seq23, second];
+    fetchFavouriteRouteStopMetadataMock.mockResolvedValue(saved.map(metadata));
+    renderPage(saved);
+
+    const remove = await screen.findByRole('button', { name: /移除.*第 23 站 上車站/ });
+    remove.focus();
+    fireEvent.click(remove);
+    expect(screen.getByRole('status').textContent).toBe('已移除 87D · 上車站 的收藏。');
+    const undo = screen.getByRole('button', { name: '復原' });
+    expect(document.activeElement).toBe(undo);
+    fireEvent.click(undo);
+    expect(screen.queryByRole('button', { name: '復原' })).toBeNull();
+    expect(localStorage.getItem(FAVOURITES_STORAGE_KEY)).toBe(serializeFavourites(saved));
+    expect(screen.getAllByRole('link', { name: /87D/ }).map((link) => new URL(link.getAttribute('href')!, window.location.origin).searchParams.get('seq'))).toEqual(['2', '23', '1']);
+  });
+
+  it('replaces the previous undo and keeps the last removal visible with the empty state', async () => {
+    const differentStop = { ...second, stopId: 'STOP2' };
+    fetchFavouriteRouteStopMetadataMock.mockResolvedValue([]);
+    renderPage([first, differentStop]);
+
+    fireEvent.click(await screen.findByRole('button', { name: /移除.*STOP1/ }));
+    fireEvent.click(screen.getByRole('button', { name: /移除.*STOP2/ }));
+    expect(screen.getByText('尚未有收藏')).toBeDefined();
+    expect(screen.getByRole('status').textContent).toBe('已移除 87D · STOP2 的收藏。');
+    expect(localStorage.getItem(FAVOURITES_STORAGE_KEY)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '復原' }));
+    expect(localStorage.getItem(FAVOURITES_STORAGE_KEY)).toBe(serializeFavourites([differentStop]));
+
+    fireEvent.click(screen.getByRole('button', { name: /移除.*STOP2/ }));
+    fireEvent.click(screen.getByRole('button', { name: '關閉' }));
+    expect(screen.queryByRole('button', { name: '復原' })).toBeNull();
+    expect(localStorage.getItem(FAVOURITES_STORAGE_KEY)).toBeNull();
+  });
 });

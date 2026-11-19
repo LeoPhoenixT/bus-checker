@@ -7,13 +7,14 @@ const favourite = { route: '87D', bound: 'O' as const, serviceType: '1', stopId:
 const otherFavourite = { route: '87D', bound: 'O' as const, serviceType: '3', stopId: 'STOP2' };
 
 function Probe() {
-  const { favourites, hydrated, removeFavourite, toggleFavourite } = useFavourites();
+  const { favourites, hydrated, removeFavourite, restoreFavourite, toggleFavourite } = useFavourites();
   return <>
     <span>{hydrated ? 'hydrated' : 'loading'}</span><span>{favourites.length}</span>
     <button onClick={() => toggleFavourite(favourite)}>toggle</button>
     <button onClick={() => toggleFavourite({ ...favourite, boardingSeq: 3 })}>choose occurrence</button>
     <button onClick={() => { toggleFavourite(favourite); toggleFavourite(otherFavourite); }}>add two</button>
     <button onClick={() => { removeFavourite(favourite); toggleFavourite(otherFavourite); }}>remove and toggle</button>
+    <button onClick={() => restoreFavourite({ ...favourite, boardingSeq: 3 }, 0)}>restore occurrence</button>
   </>;
 }
 
@@ -58,5 +59,13 @@ describe('FavouriteProvider', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'remove and toggle' }));
     await waitFor(() => expect(localStorage.getItem(FAVOURITES_STORAGE_KEY)).toBeNull());
+  });
+
+  it('does not duplicate or move an occurrence that already exists when restored', async () => {
+    const saved = [otherFavourite, { ...favourite, boardingSeq: 3 }];
+    localStorage.setItem(FAVOURITES_STORAGE_KEY, serializeFavourites(saved));
+    render(<FavouriteProvider><Probe /></FavouriteProvider>);
+    fireEvent.click(await screen.findByRole('button', { name: 'restore occurrence' }));
+    expect(localStorage.getItem(FAVOURITES_STORAGE_KEY)).toBe(serializeFavourites(saved));
   });
 });

@@ -211,7 +211,10 @@ export function ETARow({
                 {stop && onViewAlightingStop ? (
                   <button
                     type="button"
-                    onClick={() => onViewAlightingStop(stop)}
+                    onClick={(event) => {
+                      event.currentTarget.focus({ preventScroll: true });
+                      onViewAlightingStop(stop);
+                    }}
                     className="inline-flex items-center gap-0.5 rounded underline-offset-2 hover:text-blue-800 hover:underline dark:hover:text-blue-200"
                     aria-label={lang === 'en' ? `View ${name} on map` : `在地圖上查看${name}`}
                   >

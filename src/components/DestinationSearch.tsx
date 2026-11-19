@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { LoaderCircle, MapPin, Search } from 'lucide-react';
 import { getCachedStops } from '@/lib/clientStops';
 import { useKmbServiceDay } from '@/hooks/useKmbServiceDay';
@@ -24,6 +24,7 @@ export function DestinationSearch({ onSelectStop, onSelectAddress, initialQuery 
   const [addresses, setAddresses] = useState<AddressSearchResult[]>([]);
   const [addressLoading, setAddressLoading] = useState(false);
   const [addressError, setAddressError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const serviceDay = useKmbServiceDay();
 
@@ -97,14 +98,24 @@ export function DestinationSearch({ onSelectStop, onSelectAddress, initialQuery 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
         <input
+          ref={inputRef}
+          data-dialog-initial-focus
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
             setOpen(true);
           }}
-          onFocus={() => {
-            if (hasQuery) setOpen(true);
+          onFocus={(event) => {
+            const dialog = event.currentTarget.closest('[role="dialog"]');
+            if (hasQuery && (!dialog || dialog.contains(event.relatedTarget))) setOpen(true);
           }}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowDown' && hasQuery) {
+              event.preventDefault();
+              setOpen(true);
+            }
+          }}
+          onClick={() => { if (hasQuery) setOpen(true); }}
           placeholder={lang === 'en' ? 'Search stop or address' : '搜尋巴士站或地址'}
           aria-label={lang === 'en' ? 'Search destination' : '搜尋目的地'}
           role="combobox"
@@ -133,6 +144,7 @@ export function DestinationSearch({ onSelectStop, onSelectAddress, initialQuery 
               key={stop.stop}
               onClick={() => {
                 setQuery(lang === 'en' ? stop.name_en : stop.name_tc);
+                inputRef.current?.focus({ preventScroll: true });
                 setOpen(false);
                 onSelectStop(stop);
               }}
@@ -165,6 +177,7 @@ export function DestinationSearch({ onSelectStop, onSelectAddress, initialQuery 
               key={address.id}
               onClick={() => {
                 setQuery(lang === 'en' ? address.labelEn : address.labelTc);
+                inputRef.current?.focus({ preventScroll: true });
                 setOpen(false);
                 onSelectAddress(address);
               }}
