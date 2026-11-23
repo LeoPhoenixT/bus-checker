@@ -32,24 +32,6 @@ interface ETARowProps {
 
 export { getMinutesUntil } from '@/lib/etaTime';
 
-// Deterministic colour per route number — readable in both light & dark
-const ROUTE_COLOURS = [
-  'bg-blue-500/15 border-blue-500/25 text-blue-700 dark:text-blue-300',
-  'bg-violet-500/15 border-violet-500/25 text-violet-700 dark:text-violet-300',
-  'bg-emerald-500/15 border-emerald-500/25 text-emerald-700 dark:text-emerald-300',
-  'bg-rose-500/15 border-rose-500/25 text-rose-700 dark:text-rose-300',
-  'bg-amber-500/15 border-amber-500/25 text-amber-700 dark:text-amber-300',
-  'bg-cyan-500/15 border-cyan-500/25 text-cyan-700 dark:text-cyan-300',
-  'bg-pink-500/15 border-pink-500/25 text-pink-700 dark:text-pink-300',
-  'bg-indigo-500/15 border-indigo-500/25 text-indigo-700 dark:text-indigo-300',
-];
-
-function routeColour(route: string): string {
-  let h = 0;
-  for (const c of route) h = (h * 31 + c.charCodeAt(0)) & 0x7fffffff;
-  return ROUTE_COLOURS[h % ROUTE_COLOURS.length];
-}
-
 export function ETARow({
   route,
   bound,
@@ -78,10 +60,6 @@ export function ETARow({
   const routeDetailLabel = (lang === 'en'
     ? `View ${route}${isSpecial ? ' special service' : ''} route details`
     : `查看${route}${isSpecial ? '特別班' : ''}路線詳情`) + (showBoardingSeq ? (lang === 'en' ? ` (stop ${boardingSeq})` : `（第 ${boardingSeq} 站）`) : '');
-  const routeBadgeClass = clsx(
-    'inline-flex w-16 shrink-0 items-center justify-center rounded-lg border px-1.5 py-0.5 text-center text-xs font-bold',
-    routeColour(route),
-  );
   const alightingStops = alightingStopIds.map((stopId) => ({
     id: stopId,
     name: destinationStopNames[stopId]?.[lang] ?? stopId,
@@ -121,74 +99,45 @@ export function ETARow({
           ? (lang === 'en' ? 'ETA unavailable' : '暫未能提供到站時間')
           : null;
 
-  // Render primary (nearest) ETA badge
-  const renderPrimaryBadge = () => {
-    if (etaLoading && lastSuccessfulAt === null) {
-      return <span className="text-xs text-[var(--muted)]">…</span>;
-    }
-
-    if (hidesLiveETA) {
-      return <span className="text-xs font-medium text-[var(--muted)]">{lang === 'en' ? 'Unavailable' : '暫未能提供'}</span>;
-    }
-
+  const initialLoading = etaLoading && lastSuccessfulAt === null;
+  const showLater = !hidesLiveETA && !initialLoading && later.length > 0;
+  const primaryClass = 'text-sm font-semibold';
+  const renderNextArrival = () => {
+    if (initialLoading) return <span className="text-sm text-[var(--muted)]">…</span>;
+    if (hidesLiveETA) return <span className={clsx(primaryClass, 'text-[var(--muted)]')}>{lang === 'en' ? 'Unavailable' : '暫未能提供'}</span>;
     if (!nearest) return null;
+    if (nearest.minutes < 0) return <span className={clsx(primaryClass, 'text-[var(--muted)]')}>{departed}</span>;
 
-    if (nearest.minutes < 0) {
-      return <span className="text-xs text-[var(--muted)] tabular-nums">{departed}</span>;
-    }
-
-    if (nearest.minutes === 0) {
-      if (freshness === 'stale') {
-        return (
-          <span className="rounded-full border border-[var(--divider)] bg-[var(--card-border)] px-2.5 py-0.5 text-xs font-bold text-[var(--muted)]">
-            {arrivingNow}
-          </span>
-        );
-      }
-      return (
-        <span className="animate-pulse rounded-full border border-red-500/40 bg-red-500/20 px-2.5 py-0.5 text-xs font-bold text-red-500 dark:text-red-400">
-          {arrivingNow}
-        </span>
-      );
-    }
+    const urgent = nearest.minutes <= 2 && freshness !== 'stale';
+    const colour = freshness === 'stale' ? 'text-[var(--muted)]' : urgent ? 'text-[var(--eta-soon)]' : 'text-[var(--foreground)]';
+    if (nearest.minutes === 0) return <span className={clsx(primaryClass, colour)}>{arrivingNow}</span>;
 
     return (
-      <span
-        className={clsx(
-          'rounded-full border px-2.5 py-0.5 text-xs font-bold tabular-nums',
-          freshness === 'stale'
-            ? 'border-[var(--divider)] bg-[var(--card-border)] text-[var(--muted)]'
-            : nearest.minutes <= 2
-              ? 'border-red-500/40 bg-red-500/15 text-red-600 dark:text-red-400'
-              : nearest.minutes <= 5
-                ? 'border-amber-500/40 bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                : 'border-green-500/40 bg-green-500/15 text-green-600 dark:text-green-400',
-        )}
-      >
+      <span className={clsx('text-xl leading-none font-bold break-words tabular-nums sm:text-2xl', colour)}>
         {nearest.minutes} {timeUnit}
       </span>
     );
   };
 
   return (
-    <div className="flex items-center gap-3 py-2.5">
-      {/* Route badge */}
-      <div className="flex items-center gap-1.5 shrink-0">
+    <div className="nearby-columns grid min-h-14 items-center gap-x-3 py-2">
+      {/* Route number */}
+      <div className="min-w-0">
         {identityMode === 'link' ? <Link
           href={routeDetailHref}
           aria-label={routeDetailLabel}
           title={routeDetailLabel}
-          className={clsx(routeBadgeClass, 'transition hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-500/60')}
+          className="inline-flex min-h-11 max-w-full items-center rounded-sm text-lg leading-tight font-bold tracking-tight break-all text-[var(--foreground)] underline decoration-[var(--input-border)] underline-offset-4 tabular-nums hover:text-[var(--brand)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
         >
           {route}
-        </Link> : <span className={routeBadgeClass}>{route}</span>}
+        </Link> : <span className="block text-lg leading-tight font-bold tracking-tight break-all tabular-nums">{route}</span>}
       </div>
 
       {/* Destination with direction prefix */}
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0">
         {showBoardingSeq && <p className="text-xs text-[var(--muted)]">{lang === 'en' ? `Board at stop ${boardingSeq}` : `於第 ${boardingSeq} 站上車`}</p>}
         {first ? (
-          <p className="truncate text-sm font-medium leading-tight text-[var(--foreground)]">
+          <p className="text-sm leading-snug font-semibold break-words text-[var(--foreground)]">
             <span className="text-[var(--muted)] font-normal">{destPrefix}</span>
             {dest || '—'}
           </p>
@@ -196,10 +145,10 @@ export function ETARow({
           <p className="text-sm text-[var(--muted)]">{lang === 'en' ? 'No live arrivals' : '暫無班次資料'}</p>
         )}
         {variantLabel && <p className="mt-0.5 text-xs text-[var(--muted)]">{variantLabel}</p>}
-        {!hidesLiveETA && !(etaLoading && lastSuccessfulAt === null) && !nearest && nullEtaMessage && (
+        {!hidesLiveETA && !initialLoading && !nearest && nullEtaMessage && (
           <p className="mt-0.5 text-xs text-[var(--muted)]">{nullEtaMessage}</p>
         )}
-        {!hidesLiveETA && !(etaLoading && lastSuccessfulAt === null) && nearestRemark && (
+        {!hidesLiveETA && !initialLoading && nearestRemark && (
           <p className="mt-0.5 text-xs text-[var(--muted)]">{nearestRemark}</p>
         )}
         {alightingStops.length > 0 && (
@@ -215,10 +164,10 @@ export function ETARow({
                       event.currentTarget.focus({ preventScroll: true });
                       onViewAlightingStop(stop);
                     }}
-                    className="inline-flex items-center gap-0.5 rounded underline-offset-2 hover:text-blue-800 hover:underline dark:hover:text-blue-200"
+                    className="inline-flex min-h-8 items-center gap-1 rounded text-[var(--brand)] underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
                     aria-label={lang === 'en' ? `View ${name} on map` : `在地圖上查看${name}`}
                   >
-                    <MapPin className="h-3 w-3" />
+                    <MapPin className="h-3 w-3 shrink-0" aria-hidden="true" />
                     {name}
                   </button>
                 ) : <span>{name}</span>}
@@ -241,27 +190,25 @@ export function ETARow({
             {lang === 'en' ? 'Special service' : '特別班'}
           </p>
         )}
-        {/* Later arrival times shown as smaller text beneath */}
-        {!hidesLiveETA && !(etaLoading && lastSuccessfulAt === null) && later.length > 0 && (
-          <p className="mt-0.5 flex flex-wrap gap-1.5">
-            {later.map((t, i) => {
-              const rmk = etaDisplayText(lang === 'en' ? t.rmk_en : t.rmk_tc);
-              const timeText = formatETAMinutes(t.minutes, lang);
-
-              return (
-                <span key={i} className="text-[11px] tabular-nums text-[var(--muted)]">
-                  {timeText}
-                  {rmk ? ` (${rmk})` : ''}
-                </span>
-              );
-            })}
-          </p>
-        )}
       </div>
 
-      {/* Nearest arrival badge */}
-      <div className="shrink-0">{renderPrimaryBadge()}</div>
+      {(nearest || initialLoading || hidesLiveETA) && (
+        <div className="min-w-0 text-right">
+          <span className="sr-only">{lang === 'en' ? 'Next bus: ' : '下一班：'}</span>
+          {renderNextArrival()}
+        </div>
+      )}
 
+      {showLater && (
+        <div className="col-start-3 mt-1 flex min-w-0 flex-col gap-0.5 text-right text-xs leading-snug break-words text-[var(--muted)] tabular-nums md:col-start-4 md:mt-0">
+          <span className="sr-only">{lang === 'en' ? 'Following buses: ' : '隨後班次：'}</span>
+          {later.map((prediction, index) => {
+            const remark = etaDisplayText(lang === 'en' ? prediction.rmk_en : prediction.rmk_tc);
+            const time = formatETAMinutes(prediction.minutes, lang);
+            return <span key={index}>{time}{remark ? ` (${remark})` : ''}</span>;
+          })}
+        </div>
+      )}
     </div>
   );
 }

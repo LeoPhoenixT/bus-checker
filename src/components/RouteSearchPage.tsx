@@ -40,12 +40,12 @@ export function RouteSearchPage() {
     <div className="min-h-screen">
       <PageHeader>
         <div className="flex min-w-0 items-center gap-2.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15">
-            <Bus className="h-5 w-5 text-white" />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--brand-surface)]">
+            <Bus className="h-5 w-5 text-[var(--brand)]" aria-hidden="true" />
           </div>
           <div>
-            <h1 className="text-lg font-bold leading-none tracking-tight text-white">Bus Checker</h1>
-            <p className="mt-0.5 text-[11px] text-blue-100">{lang === 'en' ? 'KMB & Citybus route lookup' : '九巴及城巴路線查詢'}</p>
+            <h1 className="text-lg font-bold leading-none tracking-tight text-[var(--foreground)]">Bus Checker</h1>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">{lang === 'en' ? 'KMB & Citybus route lookup' : '九巴及城巴路線查詢'}</p>
           </div>
         </div>
       </PageHeader>
@@ -135,7 +135,7 @@ export function RouteSearchPage() {
                 <Link
                   key={routeLookupKey(route)}
                   href={routeLookupHref(route, query, filter)}
-                  className="flex items-center gap-3 border-b border-[var(--divider)] px-4 py-4 transition last:border-b-0 hover:bg-blue-500/5 focus:bg-blue-500/5 focus:outline-none"
+                  className="flex items-center gap-3 border-b border-[var(--divider)] px-4 py-4 transition last:border-b-0 hover:bg-blue-500/5 focus-visible:bg-[var(--brand-surface)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--brand)]"
                 >
                   <span className="w-16 shrink-0 text-lg font-bold tabular-nums text-[var(--foreground)]">{route.route}</span>
                   <span className="min-w-0 flex-1">

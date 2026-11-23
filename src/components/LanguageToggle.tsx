@@ -5,13 +5,14 @@ export function LanguageToggle() {
   const { lang, toggleLang } = useLang();
   return (
     <button
+      type="button"
       onClick={toggleLang}
       aria-label={`Switch to ${lang === 'en' ? 'Traditional Chinese' : 'English'}`}
-      className="flex items-center gap-1 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-sm font-semibold backdrop-blur-sm transition hover:bg-white/20 active:scale-95"
+      className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm font-semibold transition-colors hover:bg-[var(--brand-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
     >
-      <span className={lang === 'en' ? 'text-white' : 'text-white/40'}>EN</span>
-      <span className="mx-0.5 text-white/30">|</span>
-      <span className={lang === 'tc' ? 'text-white' : 'text-white/40'}>中</span>
+      <span className={lang === 'en' ? 'text-[var(--brand)]' : 'text-[var(--muted)]'}>EN</span>
+      <span className="mx-0.5 text-[var(--muted)]">|</span>
+      <span className={lang === 'tc' ? 'text-[var(--brand)]' : 'text-[var(--muted)]'}>中</span>
     </button>
   );
 }

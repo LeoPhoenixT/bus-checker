@@ -1,6 +1,6 @@
 'use client';
 import { useState, useMemo } from 'react';
-import { Bus, Navigation, RotateCw } from 'lucide-react';
+import { Bus, RotateCw } from 'lucide-react';
 import { getDistance } from 'geolib';
 import { APP_CONFIG } from '@/config';
 import { useLang } from '@/contexts/LanguageContext';
@@ -9,7 +9,7 @@ import { useGeolocation } from '@/hooks/useGeolocation';
 import { useNearbyStops } from '@/hooks/useNearbyStops';
 import { useStopETAs } from '@/hooks/useStopETAs';
 import { useDirectRoutes } from '@/hooks/useDirectRoutes';
-import { filterEligibleETAs } from '@/lib/etaEligibility';
+import { getNearbyStopETAStatus, matchesNearbyRouteFilter, nearbyStopAnchor, showNearbyStopCard } from '@/lib/nearbyStopStatus';
 import { getDestinationCandidates, getDestinationPoint } from '@/lib/destination';
 import { getStopIds } from '@/lib/stopGroups';
 import { FilterBar } from '@/components/FilterBar';
@@ -143,61 +143,49 @@ function BusCheckerApp() {
     );
   }, [lat, lon, destinationPoint]);
 
-  const filteredStopCount = useMemo(() => {
-    if (routeFilters.length === 0) return visibleStops.length;
-    return visibleStops.filter((s) => {
-      const matches = destinationActive ? groupedMatchesByOriginStop[s.stop] ?? [] : undefined;
-      const etas = filterEligibleETAs(groupedEtasMap[s.stop] ?? [], matches);
-      const routes = new Set([
-        ...etas.map((eta) => eta.route.toUpperCase()),
-        ...(matches ?? []).map((match) => match.route.toUpperCase()),
-      ]);
-      return [...routes].some((route) =>
-        routeFilters.length === 0 || routeFilters.some((filter) => route.includes(filter)),
-      );
-    }).length;
-  }, [destinationActive, visibleStops, groupedEtasMap, groupedMatchesByOriginStop, routeFilters]);
+  const shownStops = useMemo(() => visibleStops.filter((stop) => showNearbyStopCard(
+    matchesNearbyRouteFilter(
+      routeFilters,
+      groupedEtasMap[stop.stop] ?? [],
+      destinationActive ? groupedMatchesByOriginStop[stop.stop] ?? [] : undefined,
+    ),
+    destinationActive,
+    getNearbyStopETAStatus(stop, etaStates),
+  )), [destinationActive, etaStates, groupedEtasMap, groupedMatchesByOriginStop, routeFilters, visibleStops]);
 
   return (
     <div className="min-h-screen">
-      {/* ── Header ── */}
-      <PageHeader controls={
-        hasCoords && !geoError && (
-          <div className="flex items-center gap-3">
+      <PageHeader>
+        <div className="flex min-w-0 shrink-0 items-center gap-2.5">
+          <span className="grid size-9 place-items-center rounded-lg bg-[var(--brand-surface)] text-[var(--brand)]">
+            <Bus className="size-5" aria-hidden="true" />
+          </span>
+          <span className="font-bold tracking-tight" translate="no">Bus Checker</span>
+        </div>
+      </PageHeader>
+
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 pt-4 pb-3 sm:px-6 sm:pt-5">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{lang === 'en' ? 'Nearby arrivals' : '附近到站'}</h1>
+          <p className="mt-0.5 text-sm text-[var(--muted)]">{lang === 'en' ? 'KMB bus stops' : '九巴巴士站'}</p>
+        </div>
+        {hasCoords && !geoError && (
+          <div className="flex flex-wrap items-center gap-2">
             <RadiusSelector radius={radius} onChangeRadius={setRadius} />
             <button
               type="button"
               onClick={refreshLocation}
               disabled={geoLoading}
-              className="flex h-10 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:cursor-wait disabled:opacity-60"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-[var(--brand)] transition-colors hover:bg-[var(--brand-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] disabled:cursor-wait disabled:opacity-60"
               aria-label={lang === 'en' ? 'Refresh current location' : '重新載入目前位置'}
-              title={lang === 'en' ? 'Refresh current location' : '重新載入目前位置'}
             >
-              <RotateCw className={`h-4 w-4 ${geoLoading ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">
-                {lang === 'en' ? 'Reload location' : '重新定位'}
-              </span>
+              <RotateCw className={geoLoading ? 'size-4 motion-safe:animate-spin' : 'size-4'} aria-hidden="true" />
+              {lang === 'en' ? 'Relocate' : '重新定位'}
             </button>
           </div>
-        )
-      }>
-        <div className="flex items-center gap-2.5 flex-1">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 flex-shrink-0">
-            <Bus className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold leading-none text-white tracking-tight">
-              Bus Checker
-            </h1>
-            <p className="mt-0.5 flex items-center gap-1 text-[11px] text-blue-100">
-              <Navigation className="h-3 w-3" />
-              {lang === 'en' ? `KMB · ${radius} m radius` : `九巴 · 半徑 ${radius} 米`}
-            </p>
-          </div>
-        </div>
-      </PageHeader>
+        )}
+      </div>
 
-      {/* ── Sticky Filter Bar (only when we have location) ── */}
       {hasCoords && !geoError && (
         <FilterBar
           filters={routeFilters}
@@ -218,8 +206,7 @@ function BusCheckerApp() {
         />
       )}
 
-      {/* ── Main Content ── */}
-      <main className="mx-auto max-w-2xl px-4 py-6 pb-24 sm:pb-6">
+      <main className="mx-auto max-w-6xl px-4 pt-3 pb-24 sm:px-6 sm:pb-8">
         {showPrompt ? (
           <LocationPrompt loading={geoLoading} error={geoError} supported={supported} onRetry={refreshLocation} />
         ) : stopsLoading ? (
@@ -265,50 +252,81 @@ function BusCheckerApp() {
           </div>
         ) : (
           <>
-            <p className="mb-4 text-xs text-[var(--muted)]">
-              {destinationActive
-                ? lang === 'en'
-                  ? `${visibleStops.length} of ${stops.length} stops have routes to destination${routeFilters.length > 0 ? ` · ${filteredStopCount} match filters` : ''}`
-                  : `${stops.length} 個巴士站中有 ${visibleStops.length} 個有前往目的地的路線${routeFilters.length > 0 ? ` · ${filteredStopCount} 個符合篩選` : ''}`
-                : lang === 'en'
-                  ? `${stops.length} stop${stops.length !== 1 ? 's' : ''} within ${radius} m${routeFilters.length > 0 ? ` · ${filteredStopCount} match${filteredStopCount !== 1 ? 'es' : ''} active filters` : ''}`
-                  : `${radius} 米內共 ${stops.length} 個巴士站${routeFilters.length > 0 ? ` · ${filteredStopCount} 個符合篩選條件` : ''}`}
-            </p>
-
-            {/* Main results */}
-            <div className="space-y-4">
-              {visibleStops.map((stop) => (
-                <StopCard
-                  key={stop.stop}
-                  stop={stop}
-                  etas={groupedEtasMap[stop.stop] ?? []}
-                  routeFilters={routeFilters}
-                  showRoutesWithoutETA={showRoutesWithoutETA}
-                  etasLoading={getStopIds(stop).some((stopId) => {
-                    const etaState = etaStates[stopId.toUpperCase()];
-                    return etaState?.attemptStatus === 'loading' && etaState.lastSuccessfulAt === null;
-                  })}
-                  destinationMatches={destinationActive ? groupedMatchesByOriginStop[stop.stop] ?? [] : undefined}
-                  destinationStopNames={destinationStopNames}
-                  destinationStops={destinationStopsById}
-                  etaStates={etaStates}
-                />
-              ))}
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4">
+              <p className="text-sm text-[var(--muted)]">
+                {destinationActive
+                  ? lang === 'en'
+                    ? `${shownStops.length} of ${stops.length} stops with matching direct routes`
+                    : `${stops.length} 個巴士站中有 ${shownStops.length} 個有符合條件的直達路線`
+                  : lang === 'en'
+                    ? `${shownStops.length} of ${stops.length} stops within ${radius} m`
+                    : `${radius} 米內顯示 ${shownStops.length} 個巴士站（共 ${stops.length} 個）`}
+              </p>
+              <RefreshIndicator
+                inline
+                lastRefreshed={lastRefreshed}
+                lastAttemptAt={lastAttemptAt}
+                failedStopCount={failedStopCount}
+                loading={etaLoading}
+                onRefresh={refresh}
+              />
             </div>
+            {shownStops.length === 0 ? (
+              <p role="status" className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 text-sm text-[var(--muted)]">
+                {lang === 'en' ? 'No stops match the route filters. Clear or change the filters to see nearby stops.' : '沒有巴士站符合路線篩選。請清除或調整篩選。'}
+              </p>
+            ) : (
+              <div className="grid items-start gap-4 lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)]">
+                <nav
+                  aria-label={lang === 'en' ? 'Jump to a nearby stop' : '跳至附近巴士站'}
+                  className="sticky top-4 hidden max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-2 lg:block"
+                >
+                  <h2 className="px-2 pt-1 pb-2 text-sm font-semibold text-[var(--muted)]">
+                    {lang === 'en' ? 'Nearby stops' : '附近巴士站'}
+                  </h2>
+                  <ul className="space-y-0.5">
+                    {shownStops.map((stop) => (
+                      <li key={stop.stop}>
+                        <a
+                          href={`#${nearbyStopAnchor(stop.stop)}`}
+                          className="block min-h-11 rounded-lg px-2 py-2 text-sm leading-snug font-medium hover:bg-[var(--brand-surface)] hover:text-[var(--brand)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--brand)]"
+                        >
+                          {lang === 'en' ? stop.name_en : stop.name_tc}
+                          <span className="mt-0.5 block text-xs text-[var(--muted)] tabular-nums">
+                            {stop.distanceM < 1000 ? `${stop.distanceM} m` : `${(stop.distanceM / 1000).toFixed(1)} km`}
+                          </span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </nav>
+                <section aria-label={lang === 'en' ? 'Arrival board' : '到站看板'} className="nearby-board min-w-0 space-y-3">
+                  <h2 className="sr-only">{lang === 'en' ? 'Arrival board' : '到站看板'}</h2>
+                  <div aria-hidden="true" className="nearby-columns hidden gap-x-3 px-4 text-xs font-semibold text-[var(--muted)] md:grid">
+                    <span>{lang === 'en' ? 'Route' : '路線'}</span>
+                    <span>{lang === 'en' ? 'Destination' : '目的地'}</span>
+                    <span className="text-right">{lang === 'en' ? 'Next' : '下一班'}</span>
+                    <span className="text-right">{lang === 'en' ? 'Following' : '隨後班次'}</span>
+                  </div>
+                  {shownStops.map((stop) => (
+                    <StopCard
+                      key={stop.stop}
+                      stop={stop}
+                      etas={groupedEtasMap[stop.stop] ?? []}
+                      routeFilters={routeFilters}
+                      showRoutesWithoutETA={showRoutesWithoutETA}
+                      destinationMatches={destinationActive ? groupedMatchesByOriginStop[stop.stop] ?? [] : undefined}
+                      destinationStopNames={destinationStopNames}
+                      destinationStops={destinationStopsById}
+                      etaStates={etaStates}
+                    />
+                  ))}
+                </section>
+              </div>
+            )}
           </>
         )}
       </main>
-
-      {/* ── Refresh Indicator ── */}
-      {hasCoords && !geoError && (
-        <RefreshIndicator
-          lastRefreshed={lastRefreshed}
-          lastAttemptAt={lastAttemptAt}
-          failedStopCount={failedStopCount}
-          loading={etaLoading}
-          onRefresh={refresh}
-        />
-      )}
 
       {/* ── Destination Modal ── */}
       <DestinationModal

@@ -187,7 +187,7 @@ export function FavouritesPage() {
   return (
     <div className="min-h-screen">
       <PageHeader>
-        <div className="flex items-center gap-2.5 text-white"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15"><Heart className="h-5 w-5" /></span><div><h1 className="text-lg font-bold leading-none">{lang === 'en' ? 'Favourites' : '收藏'}</h1><p className="mt-0.5 text-[11px] text-blue-100">{lang === 'en' ? 'Your usual boarding stops' : '你常用的上車站'}</p></div></div>
+        <div className="flex items-center gap-2.5 text-[var(--foreground)]"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--brand-surface)] text-[var(--brand)]"><Heart className="h-5 w-5" aria-hidden="true" /></span><div><h1 className="text-lg font-bold leading-none">{lang === 'en' ? 'Favourites' : '收藏'}</h1><p className="mt-0.5 text-xs text-[var(--muted)]">{lang === 'en' ? 'Your usual boarding stops' : '你常用的上車站'}</p></div></div>
       </PageHeader>
       <main ref={mainRef} tabIndex={-1} className="mx-auto max-w-2xl px-4 py-6 pb-24 outline-none sm:pb-6">
         <div className={removed ? 'mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-2 pl-4' : undefined}>

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { useLang } from '@/contexts/LanguageContext';
 import { getETAFreshness } from '@/lib/etaFreshness';
@@ -10,6 +10,7 @@ interface RefreshIndicatorProps {
   lastAttemptAt?: Date | null;
   failedStopCount?: number;
   loading: boolean;
+  inline?: boolean;
   onRefresh?: () => Promise<void> | void;
 }
 
@@ -18,9 +19,11 @@ export function RefreshIndicator({
   lastAttemptAt = null,
   failedStopCount = 0,
   loading,
+  inline = false,
   onRefresh,
 }: RefreshIndicatorProps) {
   const { lang } = useLang();
+  const statusId = useId();
   const [now, setNow] = useState(() => Date.now());
 
   const handleRefresh = async () => {
@@ -57,15 +60,40 @@ export function RefreshIndicator({
   // One transient failed refresh should not turn a recently updated UI amber.
   const statusIsWarning = isUnavailable || isOld;
 
+  const statusColour = statusIsWarning ? 'text-amber-700 dark:text-amber-300' : 'text-[var(--muted)]';
+
+  if (inline) {
+    return (
+      <div className="flex min-w-0 flex-wrap items-center gap-x-1 text-xs">
+        <span id={statusId} className={statusColour}>{statusText}</span>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={loading}
+          aria-describedby={statusId}
+          className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 font-semibold text-[var(--brand)] transition-colors hover:bg-[var(--brand-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <RefreshCw className={clsx('size-4', loading && 'motion-safe:animate-spin')} aria-hidden="true" />
+          {lang === 'en' ? 'Refresh ETA' : '更新到站時間'}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <button
       onClick={handleRefresh}
       disabled={loading}
-      className="fixed bottom-20 right-4 z-30 flex items-center gap-2 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3.5 py-2 text-xs shadow-2xl backdrop-blur-md transition-opacity disabled:opacity-60 disabled:cursor-not-allowed hover:border-blue-500/50 hover:bg-blue-500/5 sm:bottom-4"
+      type="button"
+      className={clsx(
+        'flex min-h-11 items-center gap-2 rounded-lg px-2 text-xs transition-colors hover:bg-[var(--brand-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] disabled:cursor-not-allowed disabled:opacity-60',
+        'fixed right-4 bottom-20 z-30 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3.5 shadow-lg sm:bottom-4',
+      )}
       aria-label={lang === 'en' ? 'Refresh bus data' : '刷新巴士資料'}
     >
       <RefreshCw
-        className={clsx('h-3 w-3', loading ? 'animate-spin text-blue-500' : 'text-[var(--muted)]')}
+        aria-hidden="true"
+        className={clsx('h-3 w-3', loading ? 'text-[var(--brand)] motion-safe:animate-spin' : 'text-[var(--muted)]')}
       />
       <span className={clsx(
         'hidden sm:inline',

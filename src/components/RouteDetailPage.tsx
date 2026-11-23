@@ -221,11 +221,11 @@ export function RouteDetailPage({ route, bound, serviceType, searchQuery, search
   return (
     <div className="min-h-screen">
       <PageHeader>
-        <Link href={searchHref(searchQuery, searchFilter)} className="flex min-w-0 items-center gap-2.5 text-white transition-opacity hover:opacity-85">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15"><ArrowLeft className="h-5 w-5" /></span>
+        <Link href={searchHref(searchQuery, searchFilter)} className="flex min-w-0 items-center gap-2.5 rounded-lg text-[var(--foreground)] transition-colors hover:text-[var(--brand)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--brand-surface)] text-[var(--brand)]"><ArrowLeft className="h-5 w-5" aria-hidden="true" /></span>
           <span>
             <span className="block text-lg font-bold leading-none tracking-tight">{route}</span>
-            <span className="mt-0.5 block text-[11px] text-blue-100">{lang === 'en' ? 'Route detail' : '路線詳情'}</span>
+            <span className="mt-0.5 block text-xs text-[var(--muted)]">{lang === 'en' ? 'Route detail' : '路線詳情'}</span>
           </span>
         </Link>
       </PageHeader>
@@ -300,7 +300,7 @@ export function RouteDetailPage({ route, bound, serviceType, searchQuery, search
                         type="button"
                         onClick={() => setSelectedStopKey((current) => current === stopKey ? null : stopKey)}
                         aria-expanded={selected}
-                        className={clsx('flex w-full items-start gap-3 border-l-4 border-transparent px-4 py-3.5 text-left transition hover:bg-blue-500/5 focus:bg-blue-500/5 focus:outline-none', selected && 'border-blue-500 bg-blue-500/10')}
+                        className={clsx('flex w-full items-start gap-3 border-l-4 border-transparent px-4 py-3.5 text-left transition hover:bg-blue-500/5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--brand)]', selected && 'border-blue-500 bg-blue-500/10')}
                       >
                         <span className={clsx('w-8 shrink-0 text-sm font-bold tabular-nums', selected ? 'text-blue-600 dark:text-blue-400' : 'text-[var(--muted)]')}>{String(stop.seq).padStart(2, '0')}</span>
                         <span className="min-w-0 flex-1 break-words text-sm font-semibold leading-5 text-[var(--foreground)]">{stopName(stop, lang)}</span>
