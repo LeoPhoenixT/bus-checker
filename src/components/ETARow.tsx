@@ -194,14 +194,14 @@ export function ETARow({
 
       {(nearest || initialLoading || hidesLiveETA) && (
         <div className="min-w-0 text-right">
-          <span className="sr-only">{lang === 'en' ? 'Next bus: ' : '下一班：'}</span>
+          <span className="sr-only">{lang === 'en' ? 'First ETA: ' : '首筆預報：'}</span>
           {renderNextArrival()}
         </div>
       )}
 
       {showLater && (
         <div className="col-start-3 mt-1 flex min-w-0 flex-col gap-0.5 text-right text-xs leading-snug break-words text-[var(--muted)] tabular-nums md:col-start-4 md:mt-0">
-          <span className="sr-only">{lang === 'en' ? 'Following buses: ' : '隨後班次：'}</span>
+          <span className="sr-only">{lang === 'en' ? 'Later ETAs: ' : '後續預報：'}</span>
           {later.map((prediction, index) => {
             const remark = etaDisplayText(lang === 'en' ? prediction.rmk_en : prediction.rmk_tc);
             const time = formatETAMinutes(prediction.minutes, lang);
