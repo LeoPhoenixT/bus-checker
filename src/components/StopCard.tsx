@@ -8,7 +8,7 @@ import { StopLocationModal } from './StopLocationModal';
 import { filterEligibleETAs } from '@/lib/etaEligibility';
 import { isSpecialService } from '@/lib/routeVariants';
 import type { StopETAStateWithFreshness } from '@/hooks/useStopETAs';
-import { getNearbyStopETAStatus, matchesNearbyRouteFilter, nearbyStopAnchor, showNearbyStopCard } from '@/lib/nearbyStopStatus';
+import { getNearbyStopETAStatus, matchesNearbyRouteFilter, nearbyStopAnchor, nearbyStopDistance, nearbyStopName, showNearbyStopCard } from '@/lib/nearbyStopStatus';
 import { getMinutesUntil } from '@/lib/etaTime';
 import { getETAPredictions } from '@/lib/etaPresentation';
 import { groupNearbyRouteVariants, nearbyVariantKey, type NearbyRouteVariant } from '@/lib/nearbyRoutePresentation';
@@ -20,6 +20,7 @@ interface StopCardProps {
   routeFilters: string[];
   etasLoading?: boolean;
   showRoutesWithoutETA?: boolean;
+  showStopId?: boolean;
   destinationMatches?: DirectRouteMatch[];
   destinationStopNames?: DestinationStopNames;
   destinationStops?: Record<string, Stop>;
@@ -40,6 +41,7 @@ export function StopCard({
   routeFilters,
   etasLoading = false,
   showRoutesWithoutETA = true,
+  showStopId = false,
   destinationMatches,
   destinationStopNames,
   destinationStops,
@@ -48,7 +50,7 @@ export function StopCard({
   const { lang } = useLang();
   const [mapStop, setMapStop] = useState<Stop | null>(null);
   const [expandedRoutes, setExpandedRoutes] = useState(false);
-  const name = lang === 'en' ? stop.name_en : stop.name_tc;
+  const name = nearbyStopName(stop, lang);
   const status = getNearbyStopETAStatus(stop, etaStates);
   const { freshness: stopFreshness, lastSuccessfulAt: stopLastSuccessfulAt, loading: stopETALoading, hasProblem: hasETAProblem } = status;
 
@@ -125,15 +127,16 @@ export function StopCard({
   const finalContainers = limitRoutes && !expandedRoutes ? rankedContainers.slice(0, 5) : rankedContainers;
   const extraRoutes = rankedContainers.length - 5;
 
-  const distanceLabel = stop.distanceM < 1000
-    ? `${stop.distanceM} m`
-    : `${(stop.distanceM / 1000).toFixed(1)} km`;
+  const distanceLabel = nearbyStopDistance(stop.distanceM);
 
   return (
     <>
       <article id={nearbyStopAnchor(stop.stop)} tabIndex={-1} className="scroll-mt-4 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]">
         <div className="flex items-center justify-between gap-2 rounded-t-xl border-b border-[var(--card-border)] bg-[var(--brand-surface)] py-1 pr-2 pl-3 sm:pl-4">
-          <h3 className="min-w-0 flex-1 text-sm leading-snug font-bold text-[var(--foreground)] sm:text-base">{name}</h3>
+          <h3 className="min-w-0 flex-1 text-sm leading-snug font-bold [overflow-wrap:anywhere] text-[var(--foreground)] sm:text-base">
+            {name}
+            {showStopId && <span className="mt-0.5 block font-mono text-xs font-normal text-[var(--muted)]">{stop.stop}</span>}
+          </h3>
           <span className="shrink-0 text-xs font-semibold text-[var(--brand)] tabular-nums">{distanceLabel}</span>
           <button
             type="button"

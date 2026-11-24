@@ -1,7 +1,7 @@
 import type { StopETAStateWithFreshness } from '@/hooks/useStopETAs';
 import type { ETAFreshness } from './etaFreshness';
 import { getStopIds } from './stopGroups';
-import type { DirectRouteMatch, ETAEntry, Stop } from './types';
+import type { DirectRouteMatch, ETAEntry, Lang, Stop } from './types';
 
 const freshnessPriority: Record<ETAFreshness, number> = {
   fresh: 0,
@@ -56,4 +56,15 @@ export function showNearbyStopCard(
 
 export function nearbyStopAnchor(stopId: string): string {
   return `nearby-stop-${stopId}`;
+}
+
+export function nearbyStopName(stop: Stop, lang: Lang): string {
+  const names = lang === 'en'
+    ? [stop.name_en, stop.name_tc, stop.name_sc]
+    : [stop.name_tc, stop.name_en, stop.name_sc];
+  return names.find((name) => name?.trim())?.trim() || stop.stop;
+}
+
+export function nearbyStopDistance(distanceM: number): string {
+  return distanceM < 1000 ? `${distanceM} m` : `${(distanceM / 1000).toFixed(1)} km`;
 }

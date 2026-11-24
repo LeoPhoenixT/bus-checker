@@ -38,6 +38,7 @@ export function FilterBar({
 }: FilterBarProps) {
   const { lang } = useLang();
   const hintId = useId();
+  const destinationSummaryId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const commit = () => {
@@ -97,7 +98,7 @@ export function FilterBar({
             <button
               type="submit"
               disabled={!inputValue.trim()}
-              aria-label={lang === 'en' ? 'Add filter' : '新增篩選'}
+              aria-label={lang === 'en' ? 'Add route filter' : '加入路線篩選'}
               className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 text-sm font-semibold text-[var(--brand)] transition-colors hover:bg-[var(--brand-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] disabled:cursor-not-allowed disabled:text-[var(--muted)] disabled:opacity-65"
             >
               <Plus className="size-4" aria-hidden="true" />
@@ -165,20 +166,26 @@ export function FilterBar({
               </button>
             )}
             {destinationActive && (
-              <button
-                type="button"
-                onClick={() => {
-                  onClearDestination();
-                  inputRef.current?.focus();
-                }}
-                aria-label={lang === 'en' ? 'Clear destination' : '清除目的地'}
-                className="inline-flex min-h-11 min-w-0 items-center gap-1.5 rounded-lg bg-[var(--brand-surface)] px-2.5 text-left text-sm font-semibold text-[var(--brand)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
-              >
+              <div className="inline-flex min-w-0 max-w-full items-center rounded-lg bg-[var(--brand-surface)] pl-2.5 text-sm font-semibold text-[var(--brand)]">
                 <MapPin className="size-4 shrink-0" aria-hidden="true" />
-                {destinationLabel && <span className="break-words">{destinationLabel}</span>}
-                <span className="shrink-0">{destinationDistanceLabel}</span>
-                <X className="size-4 shrink-0" aria-hidden="true" />
-              </button>
+                <span id={destinationSummaryId} className="ml-1.5 min-w-0 [overflow-wrap:anywhere]">
+                  <span className="sr-only">{lang === 'en' ? 'Destination: ' : '目的地：'}</span>
+                  {destinationLabel && <span>{destinationLabel} </span>}
+                  <span>{destinationDistanceLabel}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClearDestination();
+                    inputRef.current?.focus();
+                  }}
+                  aria-label={lang === 'en' ? 'Clear destination' : '清除目的地'}
+                  aria-describedby={destinationSummaryId}
+                  className="ml-1 inline-flex size-11 shrink-0 items-center justify-center rounded-lg hover:bg-[var(--card-bg)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--brand)]"
+                >
+                  <X className="size-4" aria-hidden="true" />
+                </button>
+              </div>
             )}
           </div>
         )}

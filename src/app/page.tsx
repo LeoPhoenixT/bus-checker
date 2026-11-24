@@ -9,7 +9,7 @@ import { useGeolocation } from '@/hooks/useGeolocation';
 import { useNearbyStops } from '@/hooks/useNearbyStops';
 import { useStopETAs } from '@/hooks/useStopETAs';
 import { useDirectRoutes } from '@/hooks/useDirectRoutes';
-import { getNearbyStopETAStatus, matchesNearbyRouteFilter, nearbyStopAnchor, showNearbyStopCard } from '@/lib/nearbyStopStatus';
+import { getNearbyStopETAStatus, matchesNearbyRouteFilter, nearbyStopAnchor, nearbyStopDistance, nearbyStopName, showNearbyStopCard } from '@/lib/nearbyStopStatus';
 import { getDestinationCandidates, getDestinationPoint } from '@/lib/destination';
 import { getStopIds } from '@/lib/stopGroups';
 import { FilterBar } from '@/components/FilterBar';
@@ -153,6 +153,19 @@ function BusCheckerApp() {
     getNearbyStopETAStatus(stop, etaStates),
   )), [destinationActive, etaStates, groupedEtasMap, groupedMatchesByOriginStop, routeFilters, visibleStops]);
 
+  const boardStops = useMemo(() => {
+    const labels = shownStops.map((stop) => {
+      const name = nearbyStopName(stop, lang);
+      const distance = nearbyStopDistance(stop.distanceM);
+      return { stop, name, distance, key: JSON.stringify([name, distance]) };
+    });
+    const counts = new Map<string, number>();
+    for (const { key } of labels) counts.set(key, (counts.get(key) ?? 0) + 1);
+    return labels.map(({ stop, name, distance, key }) => ({
+      stop, name, distance, showStopId: (counts.get(key) ?? 0) > 1,
+    }));
+  }, [lang, shownStops]);
+
   return (
     <div className="min-h-screen">
       <PageHeader>
@@ -177,7 +190,6 @@ function BusCheckerApp() {
               onClick={refreshLocation}
               disabled={geoLoading}
               className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-[var(--brand)] transition-colors hover:bg-[var(--brand-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] disabled:cursor-wait disabled:opacity-60"
-              aria-label={lang === 'en' ? 'Refresh current location' : '重新載入目前位置'}
             >
               <RotateCw className={geoLoading ? 'size-4 motion-safe:animate-spin' : 'size-4'} aria-hidden="true" />
               {lang === 'en' ? 'Relocate' : '重新定位'}
@@ -285,15 +297,16 @@ function BusCheckerApp() {
                     {lang === 'en' ? 'Nearby stops' : '附近巴士站'}
                   </h2>
                   <ul className="space-y-0.5">
-                    {shownStops.map((stop) => (
+                    {boardStops.map(({ stop, name, distance, showStopId }) => (
                       <li key={stop.stop}>
                         <a
                           href={`#${nearbyStopAnchor(stop.stop)}`}
                           className="block min-h-11 rounded-lg px-2 py-2 text-sm leading-snug font-medium hover:bg-[var(--brand-surface)] hover:text-[var(--brand)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--brand)]"
                         >
-                          {lang === 'en' ? stop.name_en : stop.name_tc}
+                          {name}
                           <span className="mt-0.5 block text-xs text-[var(--muted)] tabular-nums">
-                            {stop.distanceM < 1000 ? `${stop.distanceM} m` : `${(stop.distanceM / 1000).toFixed(1)} km`}
+                            {distance}
+                            {showStopId && <span className="block font-mono [overflow-wrap:anywhere]">{stop.stop}</span>}
                           </span>
                         </a>
                       </li>
@@ -305,16 +318,17 @@ function BusCheckerApp() {
                   <div aria-hidden="true" className="nearby-columns hidden gap-x-3 px-4 text-xs font-semibold text-[var(--muted)] md:grid">
                     <span>{lang === 'en' ? 'Route' : '路線'}</span>
                     <span>{lang === 'en' ? 'Destination' : '目的地'}</span>
-                    <span className="text-right">{lang === 'en' ? 'Next' : '下一班'}</span>
-                    <span className="text-right">{lang === 'en' ? 'Following' : '隨後班次'}</span>
+                    <span className="text-right">{lang === 'en' ? 'First ETA' : '首筆預報'}</span>
+                    <span className="text-right">{lang === 'en' ? 'Later ETAs' : '後續預報'}</span>
                   </div>
-                  {shownStops.map((stop) => (
+                  {boardStops.map(({ stop, showStopId }) => (
                     <StopCard
                       key={stop.stop}
                       stop={stop}
                       etas={groupedEtasMap[stop.stop] ?? []}
                       routeFilters={routeFilters}
                       showRoutesWithoutETA={showRoutesWithoutETA}
+                      showStopId={showStopId}
                       destinationMatches={destinationActive ? groupedMatchesByOriginStop[stop.stop] ?? [] : undefined}
                       destinationStopNames={destinationStopNames}
                       destinationStops={destinationStopsById}

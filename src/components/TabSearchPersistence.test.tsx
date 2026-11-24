@@ -109,7 +109,10 @@ describe('tab search persistence', () => {
   it('retains the actual nearby page draft, route chips and ETA toggle across other tabs', () => {
     render(<TestApp />);
     expect(screen.getByRole<HTMLInputElement>('switch', { name: '顯示沒有到站時間的路線' }).checked).toBe(true);
+    expect(screen.getByRole('button', { name: '重新定位' })).toBeDefined();
+    expect(screen.getByRole('button', { name: /加入/ })).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: 'Switch to English' }));
+    expect(screen.getByRole('button', { name: 'Relocate' })).toBeDefined();
     expect(screen.getByRole<HTMLInputElement>('switch', { name: 'Show routes without ETA' }).checked).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Switch to Traditional Chinese' }));
     const input = screen.getByRole('textbox');
@@ -204,6 +207,28 @@ describe('Nearby arrivals board', () => {
     const target = links[0].getAttribute('href')!;
     expect(document.getElementById(target.slice(1))).toBe(screen.getByRole('article'));
     expect(screen.queryByRole('heading', { name: '旺角中心' })).toBeNull();
+  });
+
+  it('distinguishes same-name stops at the same distance and falls back to available names', () => {
+    const stop = {
+      stop: 'STOP1', name_tc: '旺角站', name_en: 'Mong Kok Station', name_sc: '',
+      distanceM: 30, lat: 22.3, long: 114.2, data_timestamp: '',
+    };
+    nearby.stops = [
+      stop,
+      { ...stop, stop: 'STOP2' },
+      { ...stop, stop: 'STOP3', name_tc: '', name_en: 'Argyle Centre' },
+      { ...stop, stop: 'STOP4', name_tc: '', name_en: '' },
+    ];
+    render(<TestApp />);
+
+    const index = within(screen.getByRole('navigation', { name: '跳至附近巴士站' }));
+    expect(index.getByRole('link', { name: /旺角站.*STOP1/ }).getAttribute('href')).toBe('#nearby-stop-STOP1');
+    expect(index.getByRole('link', { name: /旺角站.*STOP2/ }).getAttribute('href')).toBe('#nearby-stop-STOP2');
+    expect(screen.getByRole('heading', { name: /旺角站.*STOP1/ })).toBeDefined();
+    expect(screen.getByRole('heading', { name: /旺角站.*STOP2/ })).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Argyle Centre' })).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'STOP4' })).toBeDefined();
   });
 
   it('uses one theme action and restores the chosen theme after remounting the app', () => {
