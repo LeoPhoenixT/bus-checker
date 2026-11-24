@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Home from '@/app/page';
 import { AppProviders } from './AppProviders';
 import { PrimaryNavigation } from './PrimaryNavigation';
 import { RouteSearchPage } from './RouteSearchPage';
+import type { ETAEntry, NearbyStop } from '@/lib/types';
 import { installNavigationHistory } from '@/test-utils/navigation';
 
+const nearby = vi.hoisted(() => ({
+  stops: [] as NearbyStop[],
+  etasMap: {} as Record<string, ETAEntry[]>,
+}));
 const navigation = vi.hoisted(() => ({ pathname: '/' }));
 vi.mock('next/navigation', async () => ({
   usePathname: () => navigation.pathname,
@@ -24,10 +29,10 @@ vi.mock('next/link', () => ({
 vi.mock('@/hooks/useGeolocation', () => ({ useGeolocation: () => ({
   coords: { latitude: 22.3, longitude: 114.2 }, error: null, loading: false, supported: true, refresh: vi.fn(),
 }) }));
-vi.mock('@/hooks/useNearbyStops', () => ({ useNearbyStops: () => ({ stops: [], destinationStops: [], loading: false, error: null }) }));
+vi.mock('@/hooks/useNearbyStops', () => ({ useNearbyStops: () => ({ stops: nearby.stops, destinationStops: [], loading: false, error: null }) }));
 vi.mock('@/hooks/useDirectRoutes', () => ({ useDirectRoutes: () => ({ matchesByOriginStop: {}, loading: false, error: null }) }));
 vi.mock('@/hooks/useStopETAs', () => ({ useStopETAs: () => ({
-  etasMap: {}, etaStates: {}, lastRefreshed: null, lastAttemptAt: null, failedStopCount: 0, loading: false, refresh: vi.fn(),
+  etasMap: nearby.etasMap, etaStates: {}, lastRefreshed: null, lastAttemptAt: null, failedStopCount: 0, loading: false, refresh: vi.fn(),
 }) }));
 vi.mock('@/hooks/useRouteSearch', () => ({ useRouteSearch: (query: string) => ({
   routes: query ? [{ operator: 'CTB', route: query, originEn: 'Central', originTc: '中環', destinationEn: 'Happy Valley', destinationTc: '跑馬地' }] : [],
@@ -67,11 +72,14 @@ function queryInput() {
 }
 
 beforeEach(() => {
+  nearby.stops = [];
+  nearby.etasMap = {};
   window.history.replaceState({}, '', '/');
   installNavigationHistory();
 });
 afterEach(() => {
   cleanup();
+  window.localStorage.removeItem('theme');
   vi.restoreAllMocks();
 });
 
@@ -101,7 +109,10 @@ describe('tab search persistence', () => {
   it('retains the actual nearby page draft, route chips and ETA toggle across other tabs', () => {
     render(<TestApp />);
     expect(screen.getByRole<HTMLInputElement>('switch', { name: '顯示沒有到站時間的路線' }).checked).toBe(true);
+    expect(screen.getByRole('button', { name: '重新定位' })).toBeDefined();
+    expect(screen.getByRole('button', { name: /加入/ })).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: 'Switch to English' }));
+    expect(screen.getByRole('button', { name: 'Relocate' })).toBeDefined();
     expect(screen.getByRole<HTMLInputElement>('switch', { name: 'Show routes without ETA' }).checked).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Switch to Traditional Chinese' }));
     const input = screen.getByRole('textbox');
@@ -170,5 +181,68 @@ describe('tab search persistence', () => {
     clickTab('收藏');
     clickTab('路線');
     expect(window.location.pathname + window.location.search).toBe('/routes');
+  });
+});
+
+
+describe('Nearby arrivals board', () => {
+  it('only links to rendered stop groups when the route filter changes', () => {
+    nearby.stops = [
+      { stop: 'STOP1', name_tc: '旺角站', name_en: 'Mong Kok Station', name_sc: '', distanceM: 30, lat: 22.3, long: 114.2, data_timestamp: '' },
+      { stop: 'STOP2', name_tc: '旺角中心', name_en: 'Argyle Centre', name_sc: '', distanceM: 80, lat: 22.3, long: 114.2, data_timestamp: '' },
+    ];
+    nearby.etasMap.STOP1 = [{
+      co: 'KMB', route: '74B', dir: 'O', service_type: '1', seq: 2, stop: 'STOP1', eta_seq: 1, eta: null,
+      dest_tc: '大埔中心', dest_en: 'Tai Po Centre', dest_sc: '', rmk_tc: '', rmk_en: '', rmk_sc: '', data_timestamp: '',
+    }];
+    render(<TestApp />);
+    const index = within(screen.getByRole('navigation', { name: '跳至附近巴士站' }));
+    expect(index.getAllByRole('link')).toHaveLength(2);
+
+    const input = screen.getByRole('textbox', { name: '按路線號碼篩選' });
+    fireEvent.change(input, { target: { value: '74B' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    const links = index.getAllByRole('link');
+    expect(links).toHaveLength(1);
+    const target = links[0].getAttribute('href')!;
+    expect(document.getElementById(target.slice(1))).toBe(screen.getByRole('article'));
+    expect(screen.queryByRole('heading', { name: '旺角中心' })).toBeNull();
+  });
+
+  it('distinguishes same-name stops at the same distance and falls back to available names', () => {
+    const stop = {
+      stop: 'STOP1', name_tc: '旺角站', name_en: 'Mong Kok Station', name_sc: '',
+      distanceM: 30, lat: 22.3, long: 114.2, data_timestamp: '',
+    };
+    nearby.stops = [
+      stop,
+      { ...stop, stop: 'STOP2' },
+      { ...stop, stop: 'STOP3', name_tc: '', name_en: 'Argyle Centre' },
+      { ...stop, stop: 'STOP4', name_tc: '', name_en: '' },
+    ];
+    render(<TestApp />);
+
+    const index = within(screen.getByRole('navigation', { name: '跳至附近巴士站' }));
+    expect(index.getByRole('link', { name: /旺角站.*STOP1/ }).getAttribute('href')).toBe('#nearby-stop-STOP1');
+    expect(index.getByRole('link', { name: /旺角站.*STOP2/ }).getAttribute('href')).toBe('#nearby-stop-STOP2');
+    expect(screen.getByRole('heading', { name: /旺角站.*STOP1/ })).toBeDefined();
+    expect(screen.getByRole('heading', { name: /旺角站.*STOP2/ })).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Argyle Centre' })).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'STOP4' })).toBeDefined();
+  });
+
+  it('uses one theme action and restores the chosen theme after remounting the app', () => {
+    const first = render(<TestApp />);
+    const sun = screen.getByRole('button', { name: '切換至亮色模式' });
+    expect(sun.textContent).toBe('');
+    fireEvent.click(sun);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to English' }));
+    expect(screen.getByRole('button', { name: 'Switch to dark mode' })).toBe(sun);
+    first.unmount();
+
+    render(<TestApp />);
+    expect(screen.getByRole('button', { name: '切換至深色模式' })).toBeDefined();
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 });

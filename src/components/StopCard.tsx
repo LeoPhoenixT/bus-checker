@@ -1,16 +1,14 @@
 'use client';
 import { useState } from 'react';
 import { MapPin } from 'lucide-react';
-import clsx from 'clsx';
 import { useLang } from '@/contexts/LanguageContext';
 import { ETARow } from './ETARow';
 import { NearbyRouteGroup } from './NearbyRouteGroup';
 import { StopLocationModal } from './StopLocationModal';
 import { filterEligibleETAs } from '@/lib/etaEligibility';
 import { isSpecialService } from '@/lib/routeVariants';
-import type { ETAFreshness } from '@/lib/etaFreshness';
 import type { StopETAStateWithFreshness } from '@/hooks/useStopETAs';
-import { getStopIds } from '@/lib/stopGroups';
+import { getNearbyStopETAStatus, matchesNearbyRouteFilter, nearbyStopAnchor, nearbyStopDistance, nearbyStopName, showNearbyStopCard } from '@/lib/nearbyStopStatus';
 import { getMinutesUntil } from '@/lib/etaTime';
 import { getETAPredictions } from '@/lib/etaPresentation';
 import { groupNearbyRouteVariants, nearbyVariantKey, type NearbyRouteVariant } from '@/lib/nearbyRoutePresentation';
@@ -20,8 +18,9 @@ interface StopCardProps {
   stop: NearbyStop;
   etas: ETAEntry[];
   routeFilters: string[];
-  etasLoading: boolean;
+  etasLoading?: boolean;
   showRoutesWithoutETA?: boolean;
+  showStopId?: boolean;
   destinationMatches?: DirectRouteMatch[];
   destinationStopNames?: DestinationStopNames;
   destinationStops?: Record<string, Stop>;
@@ -40,8 +39,9 @@ export function StopCard({
   stop,
   etas,
   routeFilters,
-  etasLoading,
+  etasLoading = false,
   showRoutesWithoutETA = true,
+  showStopId = false,
   destinationMatches,
   destinationStopNames,
   destinationStops,
@@ -50,37 +50,15 @@ export function StopCard({
   const { lang } = useLang();
   const [mapStop, setMapStop] = useState<Stop | null>(null);
   const [expandedRoutes, setExpandedRoutes] = useState(false);
-  const name = lang === 'en' ? stop.name_en : stop.name_tc;
-  const stopStates = getStopIds(stop)
-    .map((stopId) => etaStates[stopId.trim().toUpperCase()])
-    .filter((state): state is StopETAStateWithFreshness => Boolean(state));
+  const name = nearbyStopName(stop, lang);
+  const status = getNearbyStopETAStatus(stop, etaStates);
+  const { freshness: stopFreshness, lastSuccessfulAt: stopLastSuccessfulAt, loading: stopETALoading, hasProblem: hasETAProblem } = status;
 
-  const freshnessPriority: Record<ETAFreshness, number> = {
-    fresh: 0,
-    'slightly-old': 1,
-    stale: 2,
-    'very-stale': 3,
-    unavailable: 4,
-  };
-  const statesWithSuccessfulData = stopStates.filter((state) => state.lastSuccessfulAt !== null);
-  const stopFreshness = statesWithSuccessfulData.length === 0
-    ? stopStates.length === 0 ? 'fresh' : 'unavailable'
-    : statesWithSuccessfulData.reduce<ETAFreshness>((leastFresh, state) => (
-      freshnessPriority[state.freshness] > freshnessPriority[leastFresh] ? state.freshness : leastFresh
-    ), 'fresh');
-  const stopLastSuccessfulAt = stopStates.reduce<Date | null>((oldest, state) => {
-    if (!state.lastSuccessfulAt) return oldest;
-    if (!oldest || state.lastSuccessfulAt < oldest) return state.lastSuccessfulAt;
-    return oldest;
-  }, null);
-  const stopETALoading = stopStates.some(
-    (state) => state.attemptStatus === 'loading' && state.lastSuccessfulAt === null,
-  );
-  const stopETAUnavailable = stopStates.length > 0
-    && statesWithSuccessfulData.length === 0
-    && !stopETALoading;
-  const hasETAProblem = stopETAUnavailable || stopFreshness === 'very-stale'
-    || stopStates.some((state) => state.attemptStatus === 'error');
+  if (!showNearbyStopCard(
+    matchesNearbyRouteFilter(routeFilters, etas, destinationMatches),
+    destinationMatches !== undefined,
+    { ...status, loading: status.loading || etasLoading },
+  )) return null;
 
   // Keep exact variant identities before constructing any display containers.
   const grouped = new Map<string, NearbyRouteVariant>();
@@ -147,128 +125,101 @@ export function StopCard({
     : [...containers].sort((a, b) => earliestArrival(a.variants) - earliestArrival(b.variants));
   const limitRoutes = routeFilters.length === 0 && destinationMatches === undefined;
   const finalContainers = limitRoutes && !expandedRoutes ? rankedContainers.slice(0, 5) : rankedContainers;
-  const hiddenRouteCount = limitRoutes ? rankedContainers.length - finalContainers.length : 0;
+  const extraRoutes = rankedContainers.length - 5;
 
-  // Destination topology already establishes route membership, regardless of ETA
-  // availability. Keep feedback only for matching cards or unknown ETA-only routes.
-  if (
-    routeFilters.length > 0
-    && visibleKeys.length === 0
-    && (destinationMatches !== undefined || (!etasLoading && !stopETALoading && !hasETAProblem))
-  ) return null;
-
-  const distLabel =
-    stop.distanceM < 1000
-      ? `${stop.distanceM} m`
-      : `${(stop.distanceM / 1000).toFixed(1)} km`;
-
-  const isClose = stop.distanceM <= 50;
+  const distanceLabel = nearbyStopDistance(stop.distanceM);
 
   return (
     <>
-      <article className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-sm">
-      {/* Stop header */}
-      <div className="flex items-start justify-between gap-3 mb-1">
-        <div className="min-w-0 flex-1">
-          <h2 className="font-semibold text-base leading-snug text-[var(--foreground)]">{name}</h2>
-          <p className="mt-0.5 font-mono text-[11px] text-[var(--muted)] tracking-wide">
-            {stop.stop}
-          </p>
+      <article id={nearbyStopAnchor(stop.stop)} tabIndex={-1} className="scroll-mt-4 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]">
+        <div className="flex items-center justify-between gap-2 rounded-t-xl border-b border-[var(--card-border)] bg-[var(--brand-surface)] py-1 pr-2 pl-3 sm:pl-4">
+          <h3 className="min-w-0 flex-1 text-sm leading-snug font-bold [overflow-wrap:anywhere] text-[var(--foreground)] sm:text-base">
+            {name}
+            {showStopId && <span className="mt-0.5 block font-mono text-xs font-normal text-[var(--muted)]">{stop.stop}</span>}
+          </h3>
+          <span className="shrink-0 text-xs font-semibold text-[var(--brand)] tabular-nums">{distanceLabel}</span>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.currentTarget.focus({ preventScroll: true });
+              setMapStop(stop);
+            }}
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-[var(--brand)] hover:bg-[var(--card-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] max-sm:min-w-11 max-sm:justify-center"
+            aria-label={lang === 'en' ? 'View on map' : '在地圖上查看'}
+          >
+            <MapPin className="size-4" aria-hidden="true" />
+            <span className="hidden sm:inline">{lang === 'en' ? 'Map' : '地圖'}</span>
+          </button>
         </div>
-        <span
-          className={clsx(
-            'mt-0.5 shrink-0 flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold',
-            isClose
-              ? 'border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400'
-              : 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400',
-          )}
-        >
-          <MapPin className="h-3 w-3" />
-          {distLabel}
-        </span>
-        <button
-          onClick={(event) => {
-            event.currentTarget.focus({ preventScroll: true });
-            setMapStop(stop);
-          }}
-          className={clsx(
-            'mt-0.5 shrink-0 flex items-center justify-center h-7 w-7 rounded-lg transition',
-            'border border-[var(--divider)] hover:border-blue-500/50 hover:bg-blue-500/10',
-            'text-[var(--muted)] hover:text-blue-600 dark:hover:text-blue-400',
-          )}
-          aria-label={lang === 'en' ? 'View on map' : '在地圖上查看'}
-        >
-          <MapPin className="h-4 w-4" />
-        </button>
-      </div>
 
-      <div className="mt-2 divide-y divide-[var(--divider)]">
-        {(etasLoading || stopETALoading) && finalContainers.length === 0 ? (
-          /* Skeleton rows while first ETA fetch is in-flight */
-          [...Array(3)].map((_, i) => (
-            <div key={i} className="flex items-center gap-3 py-2.5 animate-pulse">
-              <div className="h-5 w-16 rounded-lg bg-[var(--card-border)]" />
-              <div className="flex-1 h-4 rounded bg-[var(--card-border)]" />
-              <div className="h-5 w-14 rounded-full bg-[var(--card-border)]" />
-            </div>
-          ))
-        ) : finalContainers.length === 0 ? (
-          <p className="py-3 text-sm text-[var(--muted)] text-center">
-            {hasETAProblem
-              ? lang === 'en' ? 'ETA unavailable' : '暫未能取得到站時間'
-              : !showRoutesWithoutETA
-                ? lang === 'en' ? 'No routes with ETA available' : '暫無提供到站時間的路線'
-                : lang === 'en' ? 'No arrivals available' : '暫無班次資料'}
-          </p>
-        ) : (
-          finalContainers.map((container) => {
-            const group = container.variants[0];
-            const hasAnotherOccurrence = [...grouped.values()].some((other) => (
-              other.route === group.route && other.bound === group.bound
-              && other.serviceType === group.serviceType
-              && other.boardingStopId === group.boardingStopId
-              && other.boardingSeq !== group.boardingSeq
-            ));
-            if (destinationMatches === undefined) {
-              return <NearbyRouteGroup key={container.key} container={container} showBoardingSeq={hasAnotherOccurrence} freshness={stopFreshness} lastSuccessfulAt={stopLastSuccessfulAt} etaLoading={stopETALoading} />;
-            }
-            return (
-              <ETARow
-                key={container.key}
-                route={group.route}
-                bound={group.bound}
-                serviceType={group.serviceType}
-                boardingStopId={group.boardingStopId}
-                boardingSeq={group.boardingSeq}
-                showBoardingSeq={hasAnotherOccurrence}
-                isSpecial={group.isSpecial}
-                etas={group.etas}
-                alightingStopIds={group.alightingStopIds}
-                destinationStopNames={destinationStopNames}
-                destinationStops={destinationStops}
-                onViewAlightingStop={setMapStop}
-                freshness={stopFreshness}
-                lastSuccessfulAt={stopLastSuccessfulAt}
-                etaLoading={stopETALoading}
-              />
-            );
-          })
-        )}
-        {hiddenRouteCount > 0 && (
-          <button type="button" onClick={() => setExpandedRoutes(true)} className="w-full py-3 text-center text-sm font-semibold text-blue-700 hover:underline dark:text-blue-300">
-            {lang === 'en' ? `Show ${hiddenRouteCount} more routes` : `顯示其餘 ${hiddenRouteCount} 條路線`}
-          </button>
-        )}
-        {limitRoutes && expandedRoutes && rankedContainers.length > 5 && (
-          <button type="button" onClick={() => setExpandedRoutes(false)} className="w-full py-3 text-center text-sm font-semibold text-blue-700 hover:underline dark:text-blue-300">
-            {lang === 'en' ? 'Show fewer routes' : '收起路線'}
-          </button>
-        )}
-      </div>
-    </article>
+        <div className="divide-y divide-[var(--divider)] px-3 sm:px-4">
+          {(etasLoading || stopETALoading) && finalContainers.length === 0 ? (
+            /* Skeleton rows while first ETA fetch is in-flight */
+            [...Array(3)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 py-2.5 animate-pulse motion-reduce:animate-none">
+                <div className="h-5 w-16 rounded-lg bg-[var(--card-border)]" />
+                <div className="flex-1 h-4 rounded bg-[var(--card-border)]" />
+                <div className="h-5 w-14 rounded-full bg-[var(--card-border)]" />
+              </div>
+            ))
+          ) : finalContainers.length === 0 ? (
+            <p className="py-3 text-sm text-[var(--muted)]">
+              {hasETAProblem
+                ? lang === 'en' ? 'ETA unavailable' : '暫未能取得到站時間'
+                : !showRoutesWithoutETA
+                  ? lang === 'en' ? 'No routes with ETA available' : '暫無提供到站時間的路線'
+                  : lang === 'en' ? 'No arrivals available' : '暫無班次資料'}
+            </p>
+          ) : (
+            finalContainers.map((container) => {
+              const group = container.variants[0];
+              const hasAnotherOccurrence = [...grouped.values()].some((other) => (
+                other.route === group.route && other.bound === group.bound
+                && other.serviceType === group.serviceType
+                && other.boardingStopId === group.boardingStopId
+                && other.boardingSeq !== group.boardingSeq
+              ));
+              if (destinationMatches === undefined) {
+                return <NearbyRouteGroup key={container.key} container={container} showBoardingSeq={hasAnotherOccurrence} freshness={stopFreshness} lastSuccessfulAt={stopLastSuccessfulAt} etaLoading={stopETALoading} />;
+              }
+              return (
+                <ETARow
+                  key={container.key}
+                  route={group.route}
+                  bound={group.bound}
+                  serviceType={group.serviceType}
+                  boardingStopId={group.boardingStopId}
+                  boardingSeq={group.boardingSeq}
+                  showBoardingSeq={hasAnotherOccurrence}
+                  isSpecial={group.isSpecial}
+                  etas={group.etas}
+                  alightingStopIds={group.alightingStopIds}
+                  destinationStopNames={destinationStopNames}
+                  destinationStops={destinationStops}
+                  onViewAlightingStop={setMapStop}
+                  freshness={stopFreshness}
+                  lastSuccessfulAt={stopLastSuccessfulAt}
+                  etaLoading={stopETALoading}
+                />
+              );
+            })
+          )}
+          {limitRoutes && extraRoutes > 0 && (
+            <button
+              type="button"
+              aria-expanded={expandedRoutes}
+              onClick={() => setExpandedRoutes((current) => !current)}
+              className="min-h-11 w-full rounded-lg text-center text-sm font-semibold text-[var(--brand)] hover:underline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--brand)]"
+            >
+              {expandedRoutes
+                ? lang === 'en' ? 'Show fewer routes' : '收起路線'
+                : lang === 'en' ? `Show ${extraRoutes} more routes` : `顯示其餘 ${extraRoutes} 條路線`}
+            </button>
+          )}
+        </div>
+      </article>
 
-    {/* Stop location map modal */}
-    <StopLocationModal isOpen={mapStop !== null} onClose={() => setMapStop(null)} stop={mapStop ?? stop} />
+      <StopLocationModal isOpen={mapStop !== null} onClose={() => setMapStop(null)} stop={mapStop ?? stop} />
     </>
   );
 }

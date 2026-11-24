@@ -79,8 +79,8 @@ export function CitybusRouteDetailPage({ route, bound, searchQuery = '', searchF
 
   return <div className="min-h-screen">
     <PageHeader>
-      <Link href={routeSearchHref(searchQuery, searchFilter)} className="flex items-center gap-2.5 text-white">
-        <ArrowLeft className="h-5 w-5" /><span><span className="block text-lg font-bold">{route}</span><span className="text-xs">{lang === 'en' ? 'Citybus · Route detail' : '城巴 · 路線詳情'}</span></span>
+      <Link href={routeSearchHref(searchQuery, searchFilter)} className="flex min-h-11 items-center gap-2.5 rounded-lg text-[var(--foreground)] hover:text-[var(--brand)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]">
+        <ArrowLeft className="h-5 w-5 text-[var(--brand)]" aria-hidden="true" /><span><span className="block text-lg font-bold">{route}</span><span className="text-xs text-[var(--muted)]">{lang === 'en' ? 'Citybus · Route detail' : '城巴 · 路線詳情'}</span></span>
       </Link>
     </PageHeader>
     <main className="mx-auto max-w-2xl px-4 py-6 pb-24">

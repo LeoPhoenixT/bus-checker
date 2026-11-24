@@ -93,7 +93,7 @@ describe('StopCard destination eligibility', () => {
   it('keeps a topologically valid stop visible when no live ETA exists', () => {
     renderCard([], [match], { DEST0001: { en: 'Destination Stop', tc: '目的地站' } });
     expect(screen.getByText('暫無班次資料')).toBeDefined();
-    expect(screen.getByText('ORIGIN01')).toBeDefined();
+    expect(screen.getByRole('heading', { name: '起點' })).toBeDefined();
     expect(screen.getByText('落車站：')).toBeDefined();
     expect(screen.getByText('目的地站')).toBeDefined();
     expect(screen.getByText('88X')).toBeDefined();

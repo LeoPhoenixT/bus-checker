@@ -29,5 +29,6 @@ describe('FilterBar', () => {
 
     expect(screen.getByText('中環巴士總站')).toBeDefined();
     expect(screen.getByText('885 m 外')).toBeDefined();
+    expect(screen.getByRole('button', { name: '清除目的地', description: /中環巴士總站.*885 m 外/ })).toBeDefined();
   });
 });

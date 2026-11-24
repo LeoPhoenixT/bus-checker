@@ -3,31 +3,38 @@
 /* Enable class-based dark mode for Tailwind v4 */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Light mode (default) */
 :root {
+  color-scheme: light;
   --font-app: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang HK", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
   --font-code: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  --background: #f1f5f9;
-  --foreground: #0f172a;
+  --background: #f2f5fa;
+  --brand: #174fbb;
+  --brand-surface: #e9f0ff;
+  --eta-soon: #9a3b12;
+  --foreground: #151f32;
   --card-bg: #ffffff;
   --popover-bg: #ffffff;
   --card-border: #e2e8f0;
   --input-bg: #ffffff;
   --input-border: #cbd5e1;
-  --muted: #5b677a;
+  --muted: #516077;
   --divider: #e2e8f0;
 }
 
 /* Dark mode */
 .dark {
-  --background: #0d1117;
-  --foreground: #e6edf3;
-  --card-bg: rgba(255,255,255,0.04);
-  --popover-bg: #161b22;
+  color-scheme: dark;
+  --background: #101724;
+  --brand: #a7c6ff;
+  --brand-surface: #263a59;
+  --eta-soon: #ffbe94;
+  --foreground: #f3f6fc;
+  --card-bg: #192333;
+  --popover-bg: #192333;
   --card-border: rgba(255,255,255,0.10);
   --input-bg: rgba(255,255,255,0.05);
   --input-border: rgba(255,255,255,0.10);
-  --muted: #8b949e;
+  --muted: #aebbd0;
   --divider: rgba(255,255,255,0.06);
 }
 
@@ -47,6 +54,13 @@ body {
   background-color: var(--background);
   color: var(--foreground);
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html,
+  body {
+    transition: none;
+  }
 }
 
 /* Leaflet overrides — fix icon paths broken by bundlers */
@@ -74,4 +88,15 @@ body {
 }
 .dark .leaflet-control-attribution a {
   color: #94a3b8;
+}
+
+/* Shared tracks keep the headings aligned with every nearby stop's arrival rows. */
+.nearby-columns {
+  grid-template-columns: 3.5rem minmax(0, 1fr) minmax(4rem, 26%);
+}
+
+@media (min-width: 48rem) {
+  .nearby-columns {
+    grid-template-columns: 4.25rem minmax(0, 1fr) 5.25rem minmax(7rem, 20%);
+  }
 }

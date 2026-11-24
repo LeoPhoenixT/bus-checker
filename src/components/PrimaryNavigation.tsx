@@ -32,11 +32,11 @@ export function PrimaryNavigation() {
               href={key === 'routes' ? routesHref : href}
               aria-current={active ? 'page' : undefined}
               className={clsx(
-                'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors',
-                active ? 'bg-white text-blue-700 shadow-sm' : 'text-blue-100 hover:bg-white/15 hover:text-white',
+                'inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]',
+                active ? 'bg-[var(--brand-surface)] text-[var(--brand)]' : 'text-[var(--muted)] hover:bg-[var(--brand-surface)] hover:text-[var(--brand)]',
               )}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-4 w-4" aria-hidden="true" />
               {label}
             </Link>
           );
@@ -55,11 +55,11 @@ export function PrimaryNavigation() {
               href={key === 'routes' ? routesHref : href}
               aria-current={active ? 'page' : undefined}
               className={clsx(
-                'flex flex-1 flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-colors',
-                active ? 'text-blue-600 dark:text-blue-400' : 'text-[var(--muted)]',
+                'flex flex-1 flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--brand)]',
+                active ? 'text-[var(--brand)]' : 'text-[var(--muted)]',
               )}
             >
-              <Icon className="h-5 w-5" />
+              <Icon className="h-5 w-5" aria-hidden="true" />
               {label}
             </Link>
           );
